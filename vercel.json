@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/[...all].ts": {
+      "runtime": "@vercel/node"
+    }
+  }
+}
