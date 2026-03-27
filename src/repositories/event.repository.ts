@@ -31,7 +31,7 @@ export class EventRepository {
       });
     }
 
-    const countRows = await q.clone().clearOrder().count("* as count");
+    const countRows = await q.clone().clearSelect().clearOrder().count("* as count");
     const total = firstCount(countRows);
     const rows = await q.limit(params.limit).offset(offset);
     return { rows, total };

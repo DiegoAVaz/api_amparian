@@ -78,7 +78,7 @@ export class RegistrationRepository {
       )
       .orderBy("e.starts_at", "desc");
 
-    const countRows = await q.clone().clearOrder().count("* as count");
+    const countRows = await q.clone().clearSelect().clearOrder().count("* as count");
     const total = firstCount(countRows);
     const rows = await q.limit(limit).offset(offset);
     return { rows, total };
