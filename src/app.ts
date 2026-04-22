@@ -1,5 +1,6 @@
 import cors from "cors";
 import express from "express";
+import helmet from "helmet";
 import { env } from "./config/env";
 import { errorHandler } from "./middlewares/error-handler";
 import { apiV1Router } from "./routes";
@@ -11,6 +12,9 @@ export function createApp() {
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean);
+
+  app.disable("x-powered-by");
+  app.use(helmet());
 
   app.use(
     cors(
