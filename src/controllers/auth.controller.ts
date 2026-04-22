@@ -3,9 +3,18 @@ import { z } from "zod";
 import { getContainer } from "../di/container";
 import { wrapAsync } from "../middlewares/wrap";
 
+const strongPassword = z
+  .string()
+  .min(8, "A senha deve ter pelo menos 8 caracteres")
+  .max(72, "A senha deve ter no máximo 72 caracteres")
+  .regex(/[A-Z]/, "A senha deve ter ao menos 1 letra maiúscula")
+  .regex(/[a-z]/, "A senha deve ter ao menos 1 letra minúscula")
+  .regex(/\d/, "A senha deve ter ao menos 1 número")
+  .regex(/[^\w\s]/, "A senha deve ter ao menos 1 caractere especial");
+
 const registerBody = z.object({
   email: z.string().email(),
-  password: z.string().min(6),
+  password: strongPassword,
   name: z.string().min(1),
   phone: z.string().optional(),
 });
@@ -61,7 +70,7 @@ export const authController = {
     const body = z
       .object({
         token: z.string().min(1),
-        newPassword: z.string().min(6),
+        newPassword: strongPassword,
       })
       .parse(req.body);
     await getContainer().resetPassword.execute(body.token, body.newPassword);

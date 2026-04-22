@@ -132,6 +132,10 @@ export class ResetPasswordUseCase {
     await this.db.transaction(async (trx) => {
       await trx("users").where({ id: row.user_id }).update({ password_hash });
       await trx("password_reset_tokens").where({ id: row.id }).update({ used_at: trx.fn.now() });
+      await trx("refresh_tokens")
+        .where({ user_id: row.user_id })
+        .whereNull("revoked_at")
+        .update({ revoked_at: trx.fn.now() });
     });
   }
 }

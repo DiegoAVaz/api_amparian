@@ -9,6 +9,21 @@ import {
 } from "../../utils/event-helpers";
 import { HttpError } from "../../utils/http-error";
 
+function ensureValidEventDates(
+  startsAt: Date,
+  endsAt: Date | null,
+): void {
+  if (Number.isNaN(startsAt.getTime())) {
+    throw new HttpError(400, "INVALID_DATE_RANGE", "Data de início inválida");
+  }
+  if (endsAt && Number.isNaN(endsAt.getTime())) {
+    throw new HttpError(400, "INVALID_DATE_RANGE", "Data de término inválida");
+  }
+  if (endsAt && endsAt.getTime() <= startsAt.getTime()) {
+    throw new HttpError(400, "INVALID_DATE_RANGE", "A data de término deve ser maior que a data de início");
+  }
+}
+
 export class ListMyEventsUseCase {
   constructor(private readonly events: EventRepository) {}
 
@@ -91,6 +106,9 @@ export class CreateEventUseCase {
     },
   ) {
     const status: EventStatus = body.publish ? "published" : "draft";
+    const startsAt = new Date(body.startsAt);
+    const endsAt = body.endsAt ? new Date(body.endsAt) : null;
+    ensureValidEventDates(startsAt, endsAt);
 
     const typeIds = await this.lookups.findEventTypeIdsByCodes(body.typeCodes);
     if (typeIds.length !== body.typeCodes.length) {
@@ -109,8 +127,8 @@ export class CreateEventUseCase {
         summary: body.summary,
         description: body.description ?? null,
         rules_terms: body.rulesTerms ?? null,
-        starts_at: new Date(body.startsAt),
-        ends_at: body.endsAt ? new Date(body.endsAt) : null,
+        starts_at: startsAt,
+        ends_at: endsAt,
         location_name: body.locationName ?? null,
         is_remote: body.isRemote,
         capacity: body.capacity ?? null,
@@ -161,6 +179,11 @@ export class UpdateEventUseCase {
   ) {
     const existing = await this.events.findByOrganizerAndId(userId, eventId);
     if (!existing) throw new HttpError(404, "NOT_FOUND", "Evento não encontrado");
+    const nextStartsAt = patch.startsAt !== undefined ? new Date(patch.startsAt) : new Date(existing.starts_at);
+    const nextEndsAt = patch.endsAt !== undefined
+      ? (patch.endsAt ? new Date(patch.endsAt) : null)
+      : (existing.ends_at ? new Date(existing.ends_at) : null);
+    ensureValidEventDates(nextStartsAt, nextEndsAt);
 
     await this.events.transaction(async (trx) => {
       const row: Record<string, unknown> = {};

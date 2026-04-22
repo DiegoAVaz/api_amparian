@@ -3,6 +3,14 @@ import { z } from "zod";
 import { getContainer } from "../di/container";
 import { wrapAsync } from "../middlewares/wrap";
 
+const httpUrl = z
+  .string()
+  .trim()
+  .url("URL inválida")
+  .refine((value) => value.startsWith("http://") || value.startsWith("https://"), {
+    message: "A URL deve começar com http:// ou https://",
+  });
+
 const patchBody = z.object({
   name: z.string().min(1).optional(),
   phone: z.string().nullable().optional(),
@@ -10,7 +18,7 @@ const patchBody = z.object({
   state: z.string().length(2).nullable().optional(),
   bio: z.string().nullable().optional(),
   publicOrganizationName: z.string().nullable().optional(),
-  avatarUrl: z.string().nullable().optional(),
+  avatarUrl: httpUrl.nullable().optional(),
 });
 
 const myRegsQuery = z.object({
@@ -27,39 +35,65 @@ const filterQuery = z.object({
   filter: z.enum(["upcoming", "past", "ongoing"]).optional(),
 });
 
-const createEventBody = z.object({
-  title: z.string().min(1),
-  summary: z.string().min(1),
-  description: z.string().nullable().optional(),
-  rulesTerms: z.string().nullable().optional(),
-  startsAt: z.string().datetime(),
-  endsAt: z.string().datetime().nullable().optional(),
-  locationName: z.string().nullable().optional(),
-  isRemote: z.boolean(),
-  capacity: z.number().int().positive().nullable().optional(),
-  highlightSkill: z.string().nullable().optional(),
-  typeCodes: z.array(z.string()).min(1),
-  requirementCodes: z.array(z.string()),
-  publish: z.boolean(),
-  coverImageUrl: z.string().nullable().optional(),
-});
+const createEventBody = z
+  .object({
+    title: z.string().min(1),
+    summary: z.string().min(1),
+    description: z.string().nullable().optional(),
+    rulesTerms: z.string().nullable().optional(),
+    startsAt: z.string().datetime(),
+    endsAt: z.string().datetime().nullable().optional(),
+    locationName: z.string().nullable().optional(),
+    isRemote: z.boolean(),
+    capacity: z.number().int().positive().nullable().optional(),
+    highlightSkill: z.string().nullable().optional(),
+    typeCodes: z.array(z.string()).min(1),
+    requirementCodes: z.array(z.string()),
+    publish: z.boolean(),
+    coverImageUrl: httpUrl.nullable().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (!value.endsAt) return;
+    const startsAt = new Date(value.startsAt).getTime();
+    const endsAt = new Date(value.endsAt).getTime();
+    if (endsAt <= startsAt) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "endsAt deve ser maior que startsAt",
+        path: ["endsAt"],
+      });
+    }
+  });
 
-const patchEventBody = z.object({
-  title: z.string().min(1).optional(),
-  summary: z.string().min(1).optional(),
-  description: z.string().nullable().optional(),
-  rulesTerms: z.string().nullable().optional(),
-  startsAt: z.string().datetime().optional(),
-  endsAt: z.string().datetime().nullable().optional(),
-  locationName: z.string().nullable().optional(),
-  isRemote: z.boolean().optional(),
-  capacity: z.number().int().positive().nullable().optional(),
-  highlightSkill: z.string().nullable().optional(),
-  coverImageUrl: z.string().nullable().optional(),
-  typeCodes: z.array(z.string()).optional(),
-  requirementCodes: z.array(z.string()).optional(),
-  publish: z.boolean().optional(),
-});
+const patchEventBody = z
+  .object({
+    title: z.string().min(1).optional(),
+    summary: z.string().min(1).optional(),
+    description: z.string().nullable().optional(),
+    rulesTerms: z.string().nullable().optional(),
+    startsAt: z.string().datetime().optional(),
+    endsAt: z.string().datetime().nullable().optional(),
+    locationName: z.string().nullable().optional(),
+    isRemote: z.boolean().optional(),
+    capacity: z.number().int().positive().nullable().optional(),
+    highlightSkill: z.string().nullable().optional(),
+    coverImageUrl: httpUrl.nullable().optional(),
+    typeCodes: z.array(z.string()).optional(),
+    requirementCodes: z.array(z.string()).optional(),
+    publish: z.boolean().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.startsAt === undefined || value.endsAt === undefined || value.endsAt === null) return;
+    const startsAt = new Date(value.startsAt).getTime();
+    const endsAt = new Date(value.endsAt).getTime();
+    if (endsAt <= startsAt) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "endsAt deve ser maior que startsAt",
+        path: ["endsAt"],
+      });
+    }
+  });
 
 const patchRegBody = z.object({
   status: z.enum(["pending", "confirmed", "cancelled"]),
