@@ -7,6 +7,7 @@ import { apiV1Router } from "./routes";
 
 export function createApp() {
   const app = express();
+  const isProduction = env.NODE_ENV === "production";
 
   const allowedOrigins = (env.CORS_ORIGIN ?? "")
     .split(",")
@@ -20,6 +21,7 @@ export function createApp() {
       : [devDefaultOrigin];
 
   app.disable("x-powered-by");
+  app.set("trust proxy", isProduction ? 1 : false);
   app.use(helmet());
 
   app.use(
