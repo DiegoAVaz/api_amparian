@@ -12,13 +12,19 @@ export function createApp() {
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean);
+  const devDefaultOrigin = "http://localhost:3000";
+  const allowlistedOrigins = allowedOrigins.length > 0
+    ? allowedOrigins
+    : env.NODE_ENV === "production"
+      ? []
+      : [devDefaultOrigin];
 
   app.disable("x-powered-by");
   app.use(helmet());
 
   app.use(
     cors(
-      allowedOrigins.length > 0
+      allowlistedOrigins.length > 0
         ? {
             origin(origin, callback) {
               // Allow tools and same-origin requests that do not send Origin.
@@ -27,13 +33,14 @@ export function createApp() {
                 return;
               }
 
-              if (allowedOrigins.includes(origin)) {
+              if (allowlistedOrigins.includes(origin)) {
                 callback(null, true);
                 return;
               }
 
               callback(new Error("Not allowed by CORS"));
             },
+            credentials: true,
           }
         : undefined,
     ),

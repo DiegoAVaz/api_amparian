@@ -2,6 +2,13 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { getContainer } from "../di/container";
 import { wrapAsync } from "../middlewares/wrap";
+import { HttpError } from "../utils/http-error";
+import {
+  clearAuthCookies,
+  readCookie,
+  REFRESH_COOKIE_NAME,
+  setAuthCookies,
+} from "../utils/auth-cookies";
 
 const strongPassword = z
   .string()
@@ -25,7 +32,7 @@ const loginBody = z.object({
 });
 
 const refreshBody = z.object({
-  refreshToken: z.string().min(1),
+  refreshToken: z.string().min(1).optional(),
 });
 
 const logoutBody = z.object({
@@ -36,27 +43,58 @@ export const authController = {
   register: wrapAsync(async (req: Request, res: Response) => {
     const body = registerBody.parse(req.body);
     const result = await getContainer().registerUser.execute(body);
-    res.status(201).json(result);
+    setAuthCookies(res, {
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+    });
+    res.status(201).json({
+      user: result.user,
+      expiresIn: result.expiresIn,
+    });
   }),
 
   login: wrapAsync(async (req: Request, res: Response) => {
     const body = loginBody.parse(req.body);
     const result = await getContainer().loginUser.execute(body);
-    res.json(result);
+    setAuthCookies(res, {
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+    });
+    res.json({
+      user: result.user,
+      expiresIn: result.expiresIn,
+    });
   }),
 
   refresh: wrapAsync(async (req: Request, res: Response) => {
-    const body = refreshBody.parse(req.body);
-    const result = await getContainer().refreshSession.execute(body.refreshToken, {
-      userAgent: req.headers["user-agent"],
-      ip: req.ip,
-    });
-    res.json(result);
+    const body = refreshBody.parse(req.body ?? {});
+    const refreshToken = body.refreshToken ?? readCookie(req, REFRESH_COOKIE_NAME);
+    if (!refreshToken) {
+      clearAuthCookies(res);
+      throw new HttpError(401, "INVALID_REFRESH", "Refresh inválido");
+    }
+
+    try {
+      const result = await getContainer().refreshSession.execute(refreshToken, {
+        userAgent: req.headers["user-agent"],
+        ip: req.ip,
+      });
+      setAuthCookies(res, {
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+      });
+      res.status(204).send();
+    } catch (error) {
+      clearAuthCookies(res);
+      throw error;
+    }
   }),
 
   logout: wrapAsync(async (req: Request, res: Response) => {
     const body = logoutBody.parse(req.body);
-    await getContainer().logoutUser.execute(body.refreshToken);
+    const refreshToken = body.refreshToken ?? readCookie(req, REFRESH_COOKIE_NAME);
+    await getContainer().logoutUser.execute(refreshToken);
+    clearAuthCookies(res);
     res.status(204).send();
   }),
 
