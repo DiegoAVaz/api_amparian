@@ -18,27 +18,47 @@ function allowSwaggerUi(req: express.Request, res: express.Response, next: expre
   next();
 }
 
-function createApiCorsOptions(allowlistedOrigins: string[]): cors.CorsOptions | undefined {
-  if (allowlistedOrigins.length === 0) {
-    return undefined;
+function getRequestOrigin(req: express.Request): string {
+  return `${req.protocol}://${req.get("host")}`;
+}
+
+function isSameOriginRequest(req: express.Request, origin: string): boolean {
+  try {
+    const originUrl = new URL(origin);
+    const requestHost = req.get("host");
+
+    if (!requestHost) {
+      return false;
+    }
+
+    if (originUrl.host !== requestHost) {
+      return false;
+    }
+
+    return origin === getRequestOrigin(req) || req.protocol === "http" || req.protocol === "https";
+  } catch {
+    return false;
+  }
+}
+
+function isAllowedApiOrigin(req: express.Request, allowlistedOrigins: string[], origin?: string): boolean {
+  if (!origin) {
+    return true;
   }
 
-  return {
-    origin(origin, callback) {
-      // Allow same-origin navigation, server-to-server calls, and tooling without Origin.
-      if (!origin) {
-        callback(null, true);
-        return;
-      }
+  if (isSameOriginRequest(req, origin)) {
+    return true;
+  }
 
-      if (allowlistedOrigins.includes(origin)) {
-        callback(null, true);
-        return;
-      }
+  return allowlistedOrigins.includes(origin);
+}
 
-      callback(null, true);
-    },
-    credentials: true,
+function createApiCorsOptions(allowlistedOrigins: string[]): cors.CorsOptionsDelegate<express.Request> {
+  return (req, callback) => {
+    callback(null, {
+      origin: isAllowedApiOrigin(req, allowlistedOrigins, req.headers.origin),
+      credentials: true,
+    });
   };
 }
 
@@ -46,7 +66,7 @@ function guardDisallowedApiOrigin(allowlistedOrigins: string[]): express.Request
   return (req, res, next) => {
     const origin = req.headers.origin;
 
-    if (!origin || allowlistedOrigins.length === 0 || allowlistedOrigins.includes(origin)) {
+    if (isAllowedApiOrigin(req, allowlistedOrigins, origin)) {
       next();
       return;
     }
@@ -98,11 +118,7 @@ export function createApp() {
     }),
   );
 
-  if (apiCorsOptions) {
-    app.use("/api/v1", guardDisallowedApiOrigin(allowlistedOrigins), cors(apiCorsOptions), apiV1Router);
-  } else {
-    app.use("/api/v1", apiV1Router);
-  }
+  app.use("/api/v1", guardDisallowedApiOrigin(allowlistedOrigins), cors(apiCorsOptions), apiV1Router);
 
   app.use(errorHandler);
 
