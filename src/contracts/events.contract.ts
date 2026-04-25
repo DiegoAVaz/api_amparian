@@ -44,19 +44,16 @@ export function registerEventsBoundaryContract(
         example: "Acao solidaria para arrecadacao e distribuicao.",
       }),
       org: z.string().openapi({ example: "Instituto Vida" }),
-      startsAt: z.iso
-        .datetime()
-        .openapi({ example: "2026-05-10T13:00:00.000Z" }),
+      startsAt: z.iso.datetime().openapi({ example: "2026-05-10T13:00:00.000Z" }),
       locationName: z
         .string()
         .nullable()
         .openapi({ example: "Centro Comunitario Bela Vista" }),
       isRemote: z.boolean().openapi({ example: false }),
       capacity: z.number().int().nullable().openapi({ example: 120 }),
-      coverImageUrl: z
-        .url()
-        .nullable()
-        .openapi({ example: "https://cdn.amparian.com/events/42-cover.jpg" }),
+      coverImageUrl: z.url().nullable().openapi({
+        example: "https://cdn.amparian.com/events/42-cover.jpg",
+      }),
       imageKey: z.null().openapi({ example: null }),
     }),
   );
@@ -87,13 +84,8 @@ export function registerEventsBoundaryContract(
         .openapi({ example: "Uso obrigatorio de cracha." }),
       org: z.string().openapi({ example: "Instituto Vida" }),
       organizerId: z.number().int().openapi({ example: 9 }),
-      startsAt: z.iso
-        .datetime()
-        .openapi({ example: "2026-05-10T13:00:00.000Z" }),
-      endsAt: z.iso
-        .datetime()
-        .nullable()
-        .openapi({ example: "2026-05-10T18:00:00.000Z" }),
+      startsAt: z.iso.datetime().openapi({ example: "2026-05-10T13:00:00.000Z" }),
+      endsAt: z.iso.datetime().nullable().openapi({ example: "2026-05-10T18:00:00.000Z" }),
       locationName: z
         .string()
         .nullable()
@@ -104,10 +96,9 @@ export function registerEventsBoundaryContract(
         .string()
         .nullable()
         .openapi({ example: "Organizacao de equipes" }),
-      coverImageUrl: z
-        .url()
-        .nullable()
-        .openapi({ example: "https://cdn.amparian.com/events/42-cover.jpg" }),
+      coverImageUrl: z.url().nullable().openapi({
+        example: "https://cdn.amparian.com/events/42-cover.jpg",
+      }),
       types: z.array(shared.lookupOptionSchema),
       requirements: z.array(shared.lookupOptionSchema),
       computedStatus: z
@@ -133,10 +124,7 @@ export function registerEventsBoundaryContract(
         .string()
         .nullable()
         .openapi({ example: "Voluntario de apoio" }),
-      createdAt: z
-        .string()
-        .datetime()
-        .openapi({ example: "2026-04-22T20:30:00.000Z" }),
+      createdAt: z.iso.datetime().openapi({ example: "2026-04-22T20:30:00.000Z" }),
     }),
   );
 
@@ -257,4 +245,3 @@ export function registerEventsBoundaryContract(
     },
   });
 }
-

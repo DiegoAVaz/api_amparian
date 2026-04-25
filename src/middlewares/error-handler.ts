@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { TokenExpiredError } from "jsonwebtoken";
-import { ZodError } from "zod";
+import { z, ZodError } from "zod";
 import { HttpError } from "../utils/http-error";
 
 export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction): void {
@@ -15,7 +15,7 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
       error: {
         code: "VALIDATION_ERROR",
         message: "Dados inválidos",
-        details: err.flatten(),
+        details: z.flattenError(err),
       },
     });
     return;

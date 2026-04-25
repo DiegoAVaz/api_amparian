@@ -93,7 +93,6 @@ export function createApp() {
       customSiteTitle: "Amparian API Docs",
       explorer: true,
       swaggerOptions: {
-        persistAuthorization: true,
         withCredentials: true,
       },
     }),

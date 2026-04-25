@@ -5,7 +5,7 @@ import type { SharedBoundaryComponents } from "./shared.contract";
 const httpUrlSchema = z
   .string()
   .trim()
-  .url("URL invalida")
+  .pipe(z.url({ error: "URL invalida" }))
   .refine(
     (value) => value.startsWith("http://") || value.startsWith("https://"),
     {
@@ -92,11 +92,7 @@ export const createEventBodySchema = z
       .optional()
       .openapi({ example: "Uso obrigatorio de cracha." }),
     startsAt: z.iso.datetime().openapi({ example: "2026-05-10T13:00:00.000Z" }),
-    endsAt: z.iso
-      .datetime()
-      .nullable()
-      .optional()
-      .openapi({ example: "2026-05-10T18:00:00.000Z" }),
+    endsAt: z.iso.datetime().nullable().optional().openapi({ example: "2026-05-10T18:00:00.000Z" }),
     locationName: z
       .string()
       .nullable()
@@ -164,12 +160,12 @@ export const patchEventBodySchema = z
       .optional()
       .openapi({ example: "Uso obrigatorio de cracha." }),
     startsAt: z
-      .string()
+      .iso
       .datetime()
       .optional()
       .openapi({ example: "2026-05-10T13:00:00.000Z" }),
     endsAt: z
-      .string()
+      .iso
       .datetime()
       .nullable()
       .optional()
@@ -268,10 +264,7 @@ export function registerMeBoundaryContract(
         id: z.number().int().openapi({ example: 42 }),
         title: z.string().openapi({ example: "Mutirao de Inverno" }),
         org: z.string().openapi({ example: "Instituto Vida" }),
-        startsAt: z
-          .string()
-          .datetime()
-          .openapi({ example: "2026-05-10T13:00:00.000Z" }),
+        startsAt: z.iso.datetime().openapi({ example: "2026-05-10T13:00:00.000Z" }),
       }),
     }),
   );
@@ -292,10 +285,7 @@ export function registerMeBoundaryContract(
           eventId: z.number().int().openapi({ example: 42 }),
           title: z.string().openapi({ example: "Mutirao de Inverno" }),
           org: z.string().openapi({ example: "Instituto Vida" }),
-          startsAt: z
-            .string()
-            .datetime()
-            .openapi({ example: "2026-05-10T13:00:00.000Z" }),
+          startsAt: z.iso.datetime().openapi({ example: "2026-05-10T13:00:00.000Z" }),
           dayLabel: z.string().openapi({ example: "10 de maio" }),
         }),
       ),
@@ -321,10 +311,7 @@ export function registerMeBoundaryContract(
           imageClassName: z
             .string()
             .openapi({ example: "from-teal-600 to-cyan-500" }),
-          startsAt: z
-            .string()
-            .datetime()
-            .openapi({ example: "2026-05-10T13:00:00.000Z" }),
+          startsAt: z.iso.datetime().openapi({ example: "2026-05-10T13:00:00.000Z" }),
           status: z
             .enum(["draft", "published", "cancelled"])
             .openapi({ example: "published" }),
@@ -352,25 +339,17 @@ export function registerMeBoundaryContract(
         .string()
         .nullable()
         .openapi({ example: "Uso obrigatorio de cracha." }),
-      starts_at: z
-        .string()
-        .datetime()
-        .openapi({ example: "2026-05-10T13:00:00.000Z" }),
-      ends_at: z
-        .string()
-        .datetime()
-        .nullable()
-        .openapi({ example: "2026-05-10T18:00:00.000Z" }),
+      starts_at: z.iso.datetime().openapi({ example: "2026-05-10T13:00:00.000Z" }),
+      ends_at: z.iso.datetime().nullable().openapi({ example: "2026-05-10T18:00:00.000Z" }),
       location_name: z
         .string()
         .nullable()
         .openapi({ example: "Centro Comunitario Bela Vista" }),
       is_remote: z.boolean().openapi({ example: false }),
       capacity: z.number().int().nullable().openapi({ example: 120 }),
-      cover_image_url: z
-        .url()
-        .nullable()
-        .openapi({ example: "https://cdn.amparian.com/events/42-cover.jpg" }),
+      cover_image_url: z.url().nullable().openapi({
+        example: "https://cdn.amparian.com/events/42-cover.jpg",
+      }),
       highlight_skill: z
         .string()
         .nullable()
@@ -378,16 +357,8 @@ export function registerMeBoundaryContract(
       status: z
         .enum(["draft", "published", "cancelled"])
         .openapi({ example: "draft" }),
-      created_at: z
-        .string()
-        .datetime()
-        .optional()
-        .openapi({ example: "2026-04-20T12:00:00.000Z" }),
-      updated_at: z
-        .string()
-        .datetime()
-        .optional()
-        .openapi({ example: "2026-04-22T20:30:00.000Z" }),
+      created_at: z.iso.datetime().optional().openapi({ example: "2026-04-20T12:00:00.000Z" }),
+      updated_at: z.iso.datetime().optional().openapi({ example: "2026-04-22T20:30:00.000Z" }),
       types: z.array(shared.lookupOptionSchema),
       requirements: z.array(shared.lookupOptionSchema),
       computedStatus: z
@@ -414,10 +385,7 @@ export function registerMeBoundaryContract(
           email: z.email().openapi({ example: "ana@amparian.com" }),
           phone: z.string().openapi({ example: "+55 11 99999-9999" }),
           cityUf: z.string().openapi({ example: "Sao Paulo / SP" }),
-          registrationDate: z
-            .string()
-            .datetime()
-            .openapi({ example: "2026-04-22T20:30:00.000Z" }),
+          registrationDate: z.iso.datetime().openapi({ example: "2026-04-22T20:30:00.000Z" }),
           status: z
             .enum(["pending", "confirmed", "cancelled"])
             .openapi({ example: "pending" }),
@@ -915,4 +883,3 @@ export function registerMeBoundaryContract(
     },
   });
 }
-

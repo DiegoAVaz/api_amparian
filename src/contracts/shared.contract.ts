@@ -37,7 +37,7 @@ const paginationMetaBoundarySchema = z.object({
 
 const healthBoundarySchema = z.object({
   status: z.string().openapi({ example: "ok" }),
-  timestamp: z.string().datetime().openapi({ example: "2026-04-22T20:30:00.000Z" }),
+  timestamp: z.iso.datetime().openapi({ example: "2026-04-22T20:30:00.000Z" }),
 });
 
 const lookupsBoundarySchema = z.object({

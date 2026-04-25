@@ -5,12 +5,12 @@ import type { SharedBoundaryComponents } from "./shared.contract";
 
 export const strongPasswordBoundarySchema = z
   .string()
-  .min(8, "A senha deve ter pelo menos 8 caracteres")
-  .max(72, "A senha deve ter no maximo 72 caracteres")
-  .regex(/[A-Z]/, "A senha deve ter ao menos 1 letra maiuscula")
-  .regex(/[a-z]/, "A senha deve ter ao menos 1 letra minuscula")
-  .regex(/\d/, "A senha deve ter ao menos 1 numero")
-  .regex(/[^\w\s]/, "A senha deve ter ao menos 1 caractere especial")
+  .min(8, { error: "A senha deve ter pelo menos 8 caracteres" })
+  .max(72, { error: "A senha deve ter no maximo 72 caracteres" })
+  .regex(/[A-Z]/, { error: "A senha deve ter ao menos 1 letra maiuscula" })
+  .regex(/[a-z]/, { error: "A senha deve ter ao menos 1 letra minuscula" })
+  .regex(/\d/, { error: "A senha deve ter ao menos 1 numero" })
+  .regex(/[^\w\s]/, { error: "A senha deve ter ao menos 1 caractere especial" })
   .openapi({
     example: "Senha@123",
     description: "Minimo de 8 caracteres, com letra maiuscula, minuscula, numero e caractere especial.",
