@@ -23,7 +23,7 @@ export function generateOpenApiDocument() {
       title: "Amparian API",
       version: "0.1.0",
       description:
-        "Documentacao oficial da API Amparian. Os contratos abaixo representam a camada HTTP externa da aplicacao.",
+        "Documentação oficial da API Amparian. Os contratos abaixo representam a camada HTTP externa da aplicação.",
     },
     servers: [
       {
@@ -34,24 +34,24 @@ export function generateOpenApiDocument() {
     tags: [
       {
         name: "health",
-        description: "Estado da API e verificacao basica de disponibilidade.",
+        description: "Estado da API e verificação básica de disponibilidade.",
       },
       {
         name: "auth",
         description:
-          "Autenticacao baseada em cookies HTTP-only. Login, registro e refresh definem os cookies de sessao no navegador.",
+          "Autenticação baseada em cookies HTTP-only. Login, registro e refresh definem os cookies de sessão no navegador.",
       },
       {
         name: "lookups",
-        description: "Listas auxiliares para formularios e filtros da aplicacao.",
+        description: "Listas auxiliares para formulários e filtros da aplicação.",
       },
       {
         name: "events",
-        description: "Consulta publica de eventos e inscricao autenticada.",
+        description: "Consulta pública de eventos e inscrição autenticada.",
       },
       {
         name: "me",
-        description: "Area autenticada do usuario, perfil, agenda, inscricoes e eventos do organizador.",
+        description: "Área autenticada do usuário, perfil, agenda, inscrições e eventos do organizador.",
       },
     ],
   });

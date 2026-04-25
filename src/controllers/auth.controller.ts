@@ -50,7 +50,7 @@ export const authController = {
       body.refreshToken ?? readCookie(req, REFRESH_COOKIE_NAME);
     if (!refreshToken) {
       clearAuthCookies(res);
-      throw new HttpError(401, "INVALID_REFRESH", "Refresh inválido");
+      throw new HttpError(400, "INVALID_REFRESH", "Refresh inválido");
     }
 
     try {

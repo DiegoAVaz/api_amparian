@@ -3,41 +3,40 @@ import { z } from "../docs/zod-openapi";
 import { ACCESS_COOKIE_NAME, REFRESH_COOKIE_NAME } from "../utils/auth-cookies";
 
 const errorItemSchema = z.object({
-  code: z.string().openapi({ example: "VALIDATION_ERROR" }),
-  message: z.string().openapi({ example: "Dados invalidos" }),
+  code: z.string(),
+  message: z.string(),
   details: z
     .union([z.record(z.string(), z.unknown()), z.array(z.unknown())])
-    .nullable()
-    .openapi({ example: null }),
+    .nullable(),
 });
 
 const lookupOptionBoundarySchema = z.object({
-  code: z.string().openapi({ example: "educacao" }),
-  label: z.string().openapi({ example: "Educacao" }),
+  code: z.string(),
+  label: z.string(),
 });
 
 export const userBoundarySchema = z.object({
-  id: z.number().int().openapi({ example: 7 }),
-  email: z.email().openapi({ example: "ana@amparian.com" }),
-  name: z.string().min(1).openapi({ example: "Ana Souza" }),
-  phone: z.string().nullable().openapi({ example: "+55 11 99999-9999" }),
-  city: z.string().nullable().openapi({ example: "Sao Paulo" }),
-  state: z.string().length(2).nullable().openapi({ example: "SP" }),
-  bio: z.string().nullable().openapi({ example: "Atuante em acoes sociais." }),
-  plan: z.enum(["basic", "pro"]).openapi({ example: "basic" }),
-  publicOrganizationName: z.string().nullable().openapi({ example: "Instituto Vida" }),
-  avatarUrl: z.url().nullable().openapi({ example: "https://cdn.amparian.com/avatar/7.png" }),
+  id: z.number().int(),
+  email: z.email(),
+  name: z.string().min(1),
+  phone: z.string().nullable(),
+  city: z.string().nullable(),
+  state: z.string().length(2).nullable(),
+  bio: z.string().nullable(),
+  plan: z.enum(["basic", "pro"]),
+  publicOrganizationName: z.string().nullable(),
+  avatarUrl: z.url().nullable(),
 });
 
 const paginationMetaBoundarySchema = z.object({
-  page: z.number().int().openapi({ example: 1 }),
-  limit: z.number().int().openapi({ example: 20 }),
-  total: z.number().int().openapi({ example: 57 }),
+  page: z.number().int(),
+  limit: z.number().int(),
+  total: z.number().int(),
 });
 
 const healthBoundarySchema = z.object({
-  status: z.string().openapi({ example: "ok" }),
-  timestamp: z.iso.datetime().openapi({ example: "2026-04-22T20:30:00.000Z" }),
+  status: z.string(),
+  timestamp: z.iso.datetime(),
 });
 
 const lookupsBoundarySchema = z.object({
@@ -64,10 +63,9 @@ export function registerSharedBoundaryComponents(registry: OpenAPIRegistry) {
       param: {
         name: "eventId",
         in: "path",
-        description: "ID numerico do evento.",
+        description: "ID numérico do evento.",
         required: true,
       },
-      example: 42,
     }),
   );
   const registrationIdParam = registry.registerParameter(
@@ -76,10 +74,9 @@ export function registerSharedBoundaryComponents(registry: OpenAPIRegistry) {
       param: {
         name: "registrationId",
         in: "path",
-        description: "ID numerico da inscricao.",
+        description: "ID numérico da inscrição.",
         required: true,
       },
-      example: 15,
     }),
   );
   const pageQueryParam = registry.registerParameter(
@@ -90,7 +87,6 @@ export function registerSharedBoundaryComponents(registry: OpenAPIRegistry) {
         in: "query",
         required: false,
       },
-      example: 1,
     }),
   );
   const limitQueryParam = registry.registerParameter(
@@ -101,7 +97,6 @@ export function registerSharedBoundaryComponents(registry: OpenAPIRegistry) {
         in: "query",
         required: false,
       },
-      example: 20,
     }),
   );
 
@@ -110,15 +105,15 @@ export function registerSharedBoundaryComponents(registry: OpenAPIRegistry) {
     in: "cookie",
     name: ACCESS_COOKIE_NAME,
     description:
-      "Cookie HTTP-only principal da sessao. O refresh usa o cookie "
-      + `${REFRESH_COOKIE_NAME} nos fluxos de autenticacao.`,
+      "Cookie HTTP-only principal da sessão. O refresh usa o cookie "
+      + `${REFRESH_COOKIE_NAME} nos fluxos de autenticação.`,
   });
 
   registry.registerPath({
     method: "get",
     path: "/health",
     tags: ["health"],
-    summary: "Verifica se a API esta operacional.",
+    summary: "Verifica se a API está operacional.",
     security: [],
     responses: {
       "200": {
@@ -136,7 +131,7 @@ export function registerSharedBoundaryComponents(registry: OpenAPIRegistry) {
     method: "get",
     path: "/lookups",
     tags: ["lookups"],
-    summary: "Lista tipos de evento e opcoes de requisitos.",
+    summary: "Lista tipos de evento e opções de requisitos.",
     security: [],
     responses: {
       "200": {

@@ -6,47 +6,48 @@ import type { SharedBoundaryComponents } from "./shared.contract";
 export const strongPasswordBoundarySchema = z
   .string()
   .min(8, { error: "A senha deve ter pelo menos 8 caracteres" })
-  .max(72, { error: "A senha deve ter no maximo 72 caracteres" })
-  .regex(/[A-Z]/, { error: "A senha deve ter ao menos 1 letra maiuscula" })
-  .regex(/[a-z]/, { error: "A senha deve ter ao menos 1 letra minuscula" })
-  .regex(/\d/, { error: "A senha deve ter ao menos 1 numero" })
+  .max(72, { error: "A senha deve ter no máximo 72 caracteres" })
+  .regex(/[A-Z]/, { error: "A senha deve ter ao menos 1 letra maiúscula" })
+  .regex(/[a-z]/, { error: "A senha deve ter ao menos 1 letra minúscula" })
+  .regex(/\d/, { error: "A senha deve ter ao menos 1 número" })
   .regex(/[^\w\s]/, { error: "A senha deve ter ao menos 1 caractere especial" })
   .openapi({
-    example: "Senha@123",
-    description: "Minimo de 8 caracteres, com letra maiuscula, minuscula, numero e caractere especial.",
+    description:
+      "Mínimo de 8 caracteres, com letra maiúscula, minúscula, número e caractere especial.",
   });
 
 export const registerBodySchema = z.object({
-  email: z.email().openapi({ example: "ana@amparian.com" }),
+  email: z.email(),
   password: strongPasswordBoundarySchema,
-  name: z.string().min(1).openapi({ example: "Ana Souza" }),
-  phone: z.string().optional().openapi({ example: "+55 11 99999-9999" }),
+  name: z.string().min(1),
+  phone: z.string().optional(),
 });
 
 export const loginBodySchema = z.object({
-  email: z.email().openapi({ example: "ana@amparian.com" }),
-  password: z.string().min(1).openapi({ example: "Senha@123" }),
+  email: z.email(),
+  password: z.string().min(1),
 });
 
 export const refreshBodySchema = z.object({
   refreshToken: z
     .string()
     .min(1)
-    .optional()
-    .openapi({ example: "fallback-refresh-token" }),
+    .optional(),
 });
 
 export const logoutBodySchema = z.object({
-  refreshToken: z.string().optional().openapi({ example: "fallback-refresh-token" }),
+  refreshToken: z
+    .string()
+    .optional(),
 });
 
 export const forgotPasswordBodySchema = z.object({
-  email: z.email().openapi({ example: "ana@amparian.com" }),
+  email: z.email(),
 });
 
 export const resetPasswordBodySchema = z.object({
-  token: z.string().min(1).openapi({ example: "reset-token" }),
-  newPassword: strongPasswordBoundarySchema.openapi({ example: "NovaSenha@123" }),
+  token: z.string().min(1),
+  newPassword: strongPasswordBoundarySchema,
 });
 
 export function registerAuthBoundaryContract(
@@ -58,20 +59,19 @@ export function registerAuthBoundaryContract(
     z.object({
       user: shared.userSchema,
       expiresIn: z.number().int().openapi({
-        example: 900,
-        description: "Tempo de expiracao do access token, em segundos.",
+        description: "Tempo de expiração do access token, em segundos.",
       }),
     }),
   );
   const forgotPasswordResponseSchema = registry.register(
     "ForgotPasswordResponse",
     z.object({
-      message: z.string().openapi({ example: "Se o e-mail existir, enviaremos instrucoes." }),
+      message: z.string(),
     }),
   );
 
   const setCookieHeader = {
-    description: "Cookies HTTP-only usados pela sessao.",
+    description: "Cookies HTTP-only usados pela sessão.",
     schema: { type: "string" as const },
   };
 
@@ -79,7 +79,7 @@ export function registerAuthBoundaryContract(
     method: "post",
     path: "/auth/register",
     tags: ["auth"],
-    summary: "Cria uma conta e inicia sessao por cookies.",
+    summary: "Cria uma conta e inicia sessão por cookies.",
     security: [],
     request: {
       body: {
@@ -107,7 +107,7 @@ export function registerAuthBoundaryContract(
         },
       },
       "400": {
-        description: "Falha de validacao do payload.",
+        description: "Falha de validação do payload.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "409": {
@@ -125,7 +125,7 @@ export function registerAuthBoundaryContract(
     method: "post",
     path: "/auth/login",
     tags: ["auth"],
-    summary: "Autentica usuario e define cookies HTTP-only da sessao.",
+    summary: "Autentica usuário e define cookies HTTP-only da sessão.",
     security: [],
     request: {
       body: {
@@ -153,11 +153,7 @@ export function registerAuthBoundaryContract(
         },
       },
       "400": {
-        description: "Falha de validacao do payload.",
-        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
-      },
-      "401": {
-        description: "Credenciais invalidas.",
+        description: "Falha de validação do payload ou credenciais inválidas.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "429": {
@@ -175,8 +171,8 @@ export function registerAuthBoundaryContract(
     method: "post",
     path: "/auth/refresh",
     tags: ["auth"],
-    summary: "Renova a sessao usando o refresh token do cookie ou do corpo.",
-    description: `O fluxo principal usa o cookie ${REFRESH_COOKIE_NAME}. O corpo so existe como fallback tecnico.`,
+    summary: "Renova a sessão usando o refresh token do cookie ou do corpo.",
+    description: `O fluxo principal usa o cookie ${REFRESH_COOKIE_NAME}. O corpo só existe como fallback técnico.`,
     security: [],
     request: {
       body: {
@@ -190,7 +186,7 @@ export function registerAuthBoundaryContract(
     },
     responses: {
       "204": {
-        description: "Sessao renovada e cookies atualizados.",
+        description: "Sessão renovada e cookies atualizados.",
         headers: {
           "Set-Cookie": {
             ...setCookieHeader,
@@ -199,11 +195,7 @@ export function registerAuthBoundaryContract(
         },
       },
       "400": {
-        description: "Falha de validacao do payload.",
-        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
-      },
-      "401": {
-        description: "Refresh invalido ou expirado.",
+        description: "Falha de validação do payload ou refresh inválido/expirado.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "429": {
@@ -221,7 +213,7 @@ export function registerAuthBoundaryContract(
     method: "post",
     path: "/auth/logout",
     tags: ["auth"],
-    summary: "Encerra a sessao e limpa os cookies de autenticacao.",
+    summary: "Encerra a sessão e limpa os cookies de autenticação.",
     security: [],
     request: {
       body: {
@@ -235,7 +227,7 @@ export function registerAuthBoundaryContract(
     },
     responses: {
       "204": {
-        description: "Sessao encerrada.",
+        description: "Sessão encerrada.",
         headers: {
           "Set-Cookie": {
             ...setCookieHeader,
@@ -244,7 +236,11 @@ export function registerAuthBoundaryContract(
         },
       },
       "400": {
-        description: "Falha de validacao do payload.",
+        description: "Falha de validação do payload.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      "500": {
+        description: "Erro interno.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
     },
@@ -254,7 +250,7 @@ export function registerAuthBoundaryContract(
     method: "post",
     path: "/auth/forgot-password",
     tags: ["auth"],
-    summary: "Solicita a recuperacao de senha.",
+    summary: "Solicita a recuperação de senha.",
     security: [],
     request: {
       body: {
@@ -268,7 +264,7 @@ export function registerAuthBoundaryContract(
     },
     responses: {
       "202": {
-        description: "Solicitacao recebida.",
+        description: "Solicitação recebida.",
         content: {
           "application/json": {
             schema: forgotPasswordResponseSchema,
@@ -276,7 +272,7 @@ export function registerAuthBoundaryContract(
         },
       },
       "400": {
-        description: "Falha de validacao do payload.",
+        description: "Falha de validação do payload.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "429": {
@@ -294,7 +290,8 @@ export function registerAuthBoundaryContract(
     method: "post",
     path: "/auth/reset-password",
     tags: ["auth"],
-    summary: "Redefine a senha usando o token recebido no fluxo de recuperacao.",
+    summary:
+      "Redefine a senha usando o token recebido no fluxo de recuperação.",
     security: [],
     request: {
       body: {
@@ -311,7 +308,7 @@ export function registerAuthBoundaryContract(
         description: "Senha redefinida com sucesso.",
       },
       "400": {
-        description: "Payload invalido ou token invalido.",
+        description: "Payload inválido ou token inválido.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "429": {

@@ -13,7 +13,6 @@ export const publicEventsListQuerySchema = z.object({
         required: false,
         description: "Filtro textual dos eventos publicados.",
       },
-      example: "mutirao",
     }),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
@@ -26,9 +25,8 @@ export const publicEventIdParamsSchema = z.object({
 export const eventRegistrationBodySchema = z.object({
   participantRole: z
     .string()
-    .optional()
-    .openapi({ example: "Voluntario de apoio" }),
-  agreedResponsibility: z.boolean().openapi({ example: true }),
+    .optional(),
+  agreedResponsibility: z.boolean(),
 });
 
 export function registerEventsBoundaryContract(
@@ -38,23 +36,18 @@ export function registerEventsBoundaryContract(
   const publicEventListItemSchema = registry.register(
     "PublicEventListItem",
     z.object({
-      id: z.number().int().openapi({ example: 42 }),
-      title: z.string().openapi({ example: "Mutirao de Inverno" }),
-      summary: z.string().openapi({
-        example: "Acao solidaria para arrecadacao e distribuicao.",
-      }),
-      org: z.string().openapi({ example: "Instituto Vida" }),
-      startsAt: z.iso.datetime().openapi({ example: "2026-05-10T13:00:00.000Z" }),
+      id: z.number().int(),
+      title: z.string(),
+      summary: z.string(),
+      org: z.string(),
+      startsAt: z.iso.datetime(),
       locationName: z
         .string()
-        .nullable()
-        .openapi({ example: "Centro Comunitario Bela Vista" }),
-      isRemote: z.boolean().openapi({ example: false }),
-      capacity: z.number().int().nullable().openapi({ example: 120 }),
-      coverImageUrl: z.url().nullable().openapi({
-        example: "https://cdn.amparian.com/events/42-cover.jpg",
-      }),
-      imageKey: z.null().openapi({ example: null }),
+        .nullable(),
+      isRemote: z.boolean(),
+      capacity: z.number().int().nullable(),
+      coverImageUrl: z.url().nullable(),
+      imageKey: z.null(),
     }),
   );
 
@@ -69,36 +62,28 @@ export function registerEventsBoundaryContract(
   const publicEventDetailSchema = registry.register(
     "PublicEventDetail",
     z.object({
-      id: z.number().int().openapi({ example: 42 }),
-      title: z.string().openapi({ example: "Mutirao de Inverno" }),
-      summary: z.string().openapi({
-        example: "Acao solidaria para arrecadacao e distribuicao.",
-      }),
+      id: z.number().int(),
+      title: z.string(),
+      summary: z.string(),
       description: z
         .string()
-        .nullable()
-        .openapi({ example: "Traga agasalhos e itens de higiene." }),
+        .nullable(),
       rulesTerms: z
         .string()
-        .nullable()
-        .openapi({ example: "Uso obrigatorio de cracha." }),
-      org: z.string().openapi({ example: "Instituto Vida" }),
-      organizerId: z.number().int().openapi({ example: 9 }),
-      startsAt: z.iso.datetime().openapi({ example: "2026-05-10T13:00:00.000Z" }),
-      endsAt: z.iso.datetime().nullable().openapi({ example: "2026-05-10T18:00:00.000Z" }),
+        .nullable(),
+      org: z.string(),
+      organizerId: z.number().int(),
+      startsAt: z.iso.datetime(),
+      endsAt: z.iso.datetime().nullable(),
       locationName: z
         .string()
-        .nullable()
-        .openapi({ example: "Centro Comunitario Bela Vista" }),
-      isRemote: z.boolean().openapi({ example: false }),
-      capacity: z.number().int().nullable().openapi({ example: 120 }),
+        .nullable(),
+      isRemote: z.boolean(),
+      capacity: z.number().int().nullable(),
       highlightSkill: z
         .string()
-        .nullable()
-        .openapi({ example: "Organizacao de equipes" }),
-      coverImageUrl: z.url().nullable().openapi({
-        example: "https://cdn.amparian.com/events/42-cover.jpg",
-      }),
+        .nullable(),
+      coverImageUrl: z.url().nullable(),
       types: z.array(shared.lookupOptionSchema),
       requirements: z.array(shared.lookupOptionSchema),
       computedStatus: z
@@ -109,22 +94,20 @@ export function registerEventsBoundaryContract(
           "upcoming",
           "ongoing",
           "past",
-        ])
-        .openapi({ example: "upcoming" }),
+        ]),
     }),
   );
 
   const eventRegistrationResponseSchema = registry.register(
     "EventRegistrationResponse",
     z.object({
-      id: z.number().int().openapi({ example: 15 }),
-      eventId: z.number().int().openapi({ example: 42 }),
-      status: z.literal("pending").openapi({ example: "pending" }),
+      id: z.number().int(),
+      eventId: z.number().int(),
+      status: z.literal("pending"),
       participantRole: z
         .string()
-        .nullable()
-        .openapi({ example: "Voluntario de apoio" }),
-      createdAt: z.iso.datetime().openapi({ example: "2026-04-22T20:30:00.000Z" }),
+        .nullable(),
+      createdAt: z.iso.datetime(),
     }),
   );
 
@@ -147,7 +130,7 @@ export function registerEventsBoundaryContract(
         },
       },
       "400": {
-        description: "Falha de validacao da querystring.",
+        description: "Falha de validação da querystring.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "500": {
@@ -178,11 +161,11 @@ export function registerEventsBoundaryContract(
         },
       },
       "400": {
-        description: "Falha de validacao do path param.",
+        description: "Falha de validação do path param.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "404": {
-        description: "Evento nao encontrado.",
+        description: "Evento não encontrado.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "500": {
@@ -196,9 +179,9 @@ export function registerEventsBoundaryContract(
     method: "post",
     path: "/events/{eventId}/registrations",
     tags: ["events"],
-    summary: "Inscreve o usuario autenticado em um evento publicado.",
+    summary: "Inscreve o usuário autenticado em um evento publicado.",
     description:
-      "Endpoint privado. O navegador envia automaticamente o cookie de sessao apos login.",
+      "Endpoint privado. O navegador envia automaticamente o cookie de sessão após login.",
     security: [shared.cookieAuthSecurity],
     request: {
       params: z.object({
@@ -215,7 +198,7 @@ export function registerEventsBoundaryContract(
     },
     responses: {
       "201": {
-        description: "Inscricao criada com sucesso.",
+        description: "Inscrição criada com sucesso.",
         content: {
           "application/json": {
             schema: eventRegistrationResponseSchema,
@@ -223,19 +206,19 @@ export function registerEventsBoundaryContract(
         },
       },
       "400": {
-        description: "Payload invalido ou regra de negocio nao atendida.",
+        description: "Payload inválido ou regra de negócio não atendida.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "401": {
-        description: "Autenticacao necessaria.",
+        description: "Autenticação necessária.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "404": {
-        description: "Evento nao encontrado.",
+        description: "Evento não encontrado.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "409": {
-        description: "Usuario ja inscrito no evento.",
+        description: "Usuário já inscrito no evento.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "500": {

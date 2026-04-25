@@ -5,37 +5,33 @@ import type { SharedBoundaryComponents } from "./shared.contract";
 const httpUrlSchema = z
   .string()
   .trim()
-  .pipe(z.url({ error: "URL invalida" }))
+  .pipe(z.url({ error: "URL inválida" }))
   .refine(
     (value) => value.startsWith("http://") || value.startsWith("https://"),
     {
-      error: "A URL deve comecar com http:// ou https://",
+      error: "A URL deve começar com http:// ou https://",
     },
   );
 
 export const meProfilePatchBodySchema = z.object({
-  name: z.string().min(1).optional().openapi({ example: "Ana Souza" }),
+  name: z.string().min(1).optional(),
   phone: z
     .string()
     .nullable()
-    .optional()
-    .openapi({ example: "+55 11 99999-9999" }),
-  city: z.string().nullable().optional().openapi({ example: "Sao Paulo" }),
-  state: z.string().length(2).nullable().optional().openapi({ example: "SP" }),
+    .optional(),
+  city: z.string().nullable().optional(),
+  state: z.string().length(2).nullable().optional(),
   bio: z
     .string()
     .nullable()
-    .optional()
-    .openapi({ example: "Atuante em acoes sociais." }),
+    .optional(),
   publicOrganizationName: z
     .string()
     .nullable()
-    .optional()
-    .openapi({ example: "Instituto Vida" }),
+    .optional(),
   avatarUrl: httpUrlSchema
     .nullable()
-    .optional()
-    .openapi({ example: "https://cdn.amparian.com/avatar/7.png" }),
+    .optional(),
 });
 
 export const meRegistrationsQuerySchema = z.object({
@@ -51,7 +47,6 @@ export const meAgendaQuerySchema = z.object({
     .max(2100)
     .openapi({
       param: { name: "year", in: "query", required: true },
-      example: 2026,
     }),
   month: z.coerce
     .number()
@@ -60,7 +55,6 @@ export const meAgendaQuerySchema = z.object({
     .max(12)
     .openapi({
       param: { name: "month", in: "query", required: true },
-      example: 4,
     }),
 });
 
@@ -70,59 +64,49 @@ export const meEventsFilterQuerySchema = z.object({
     .optional()
     .openapi({
       param: { name: "filter", in: "query", required: false },
-      example: "upcoming",
     }),
 });
 
 export const createEventBodySchema = z
   .object({
-    title: z.string().min(1).openapi({ example: "Mutirao de Inverno" }),
+    title: z.string().min(1),
     summary: z
       .string()
-      .min(1)
-      .openapi({ example: "Acao solidaria para arrecadacao e distribuicao." }),
+      .min(1),
     description: z
       .string()
       .nullable()
-      .optional()
-      .openapi({ example: "Traga agasalhos e itens de higiene." }),
+      .optional(),
     rulesTerms: z
       .string()
       .nullable()
-      .optional()
-      .openapi({ example: "Uso obrigatorio de cracha." }),
-    startsAt: z.iso.datetime().openapi({ example: "2026-05-10T13:00:00.000Z" }),
-    endsAt: z.iso.datetime().nullable().optional().openapi({ example: "2026-05-10T18:00:00.000Z" }),
+      .optional(),
+    startsAt: z.iso.datetime(),
+    endsAt: z.iso.datetime().nullable().optional(),
     locationName: z
       .string()
       .nullable()
-      .optional()
-      .openapi({ example: "Centro Comunitario Bela Vista" }),
-    isRemote: z.boolean().openapi({ example: false }),
+      .optional(),
+    isRemote: z.boolean(),
     capacity: z
       .number()
       .int()
       .positive()
       .nullable()
-      .optional()
-      .openapi({ example: 120 }),
+      .optional(),
     highlightSkill: z
       .string()
       .nullable()
-      .optional()
-      .openapi({ example: "Organizacao de equipes" }),
+      .optional(),
     typeCodes: z
       .array(z.string())
-      .min(1)
-      .openapi({ example: ["educacao", "assistencia-social"] }),
+      .min(1),
     requirementCodes: z
-      .array(z.string())
-      .openapi({ example: ["maior-de-18", "documento-com-foto"] }),
-    publish: z.boolean().openapi({ example: false }),
+      .array(z.string()),
+    publish: z.boolean(),
     coverImageUrl: httpUrlSchema
       .nullable()
-      .optional()
-      .openapi({ example: "https://cdn.amparian.com/events/42-cover.jpg" }),
+      .optional(),
   })
   .superRefine((value, ctx) => {
     if (!value.endsAt) return;
@@ -142,65 +126,53 @@ export const patchEventBodySchema = z
     title: z
       .string()
       .min(1)
-      .optional()
-      .openapi({ example: "Mutirao de Inverno" }),
+      .optional(),
     summary: z
       .string()
       .min(1)
-      .optional()
-      .openapi({ example: "Acao solidaria para arrecadacao e distribuicao." }),
+      .optional(),
     description: z
       .string()
       .nullable()
-      .optional()
-      .openapi({ example: "Traga agasalhos e itens de higiene." }),
+      .optional(),
     rulesTerms: z
       .string()
       .nullable()
-      .optional()
-      .openapi({ example: "Uso obrigatorio de cracha." }),
+      .optional(),
     startsAt: z
       .iso
       .datetime()
-      .optional()
-      .openapi({ example: "2026-05-10T13:00:00.000Z" }),
+      .optional(),
     endsAt: z
       .iso
       .datetime()
       .nullable()
-      .optional()
-      .openapi({ example: "2026-05-10T18:00:00.000Z" }),
+      .optional(),
     locationName: z
       .string()
       .nullable()
-      .optional()
-      .openapi({ example: "Centro Comunitario Bela Vista" }),
-    isRemote: z.boolean().optional().openapi({ example: false }),
+      .optional(),
+    isRemote: z.boolean().optional(),
     capacity: z
       .number()
       .int()
       .positive()
       .nullable()
-      .optional()
-      .openapi({ example: 120 }),
+      .optional(),
     highlightSkill: z
       .string()
       .nullable()
-      .optional()
-      .openapi({ example: "Organizacao de equipes" }),
+      .optional(),
     coverImageUrl: httpUrlSchema
       .nullable()
-      .optional()
-      .openapi({ example: "https://cdn.amparian.com/events/42-cover.jpg" }),
+      .optional(),
     typeCodes: z
       .array(z.string())
-      .optional()
-      .openapi({ example: ["educacao"] }),
+      .optional(),
     requirementCodes: z
       .array(z.string())
-      .optional()
-      .openapi({ example: ["documento-com-foto"] }),
-    publish: z.boolean().optional().openapi({ example: true }),
+      .optional(),
+    publish: z.boolean().optional(),
   })
   .superRefine((value, ctx) => {
     if (
@@ -222,8 +194,7 @@ export const patchEventBodySchema = z
 
 export const updateOrganizerRegistrationBodySchema = z.object({
   status: z
-    .enum(["pending", "confirmed", "cancelled"])
-    .openapi({ example: "confirmed" }),
+    .enum(["pending", "confirmed", "cancelled"]),
 });
 
 export const meEventIdParamsSchema = z.object({
@@ -246,25 +217,24 @@ export function registerMeBoundaryContract(
   const profileStatsSchema = registry.register(
     "ProfileStatsResponse",
     z.object({
-      hoursDonated: z.number().int().openapi({ example: 0 }),
-      causesSupported: z.number().int().openapi({ example: 4 }),
-      eventsAttended: z.number().int().openapi({ example: 8 }),
-      eventsCreated: z.number().int().openapi({ example: 3 }),
+      hoursDonated: z.number().int(),
+      causesSupported: z.number().int(),
+      eventsAttended: z.number().int(),
+      eventsCreated: z.number().int(),
     }),
   );
 
   const myRegistrationItemSchema = registry.register(
     "MyRegistrationItem",
     z.object({
-      id: z.number().int().openapi({ example: 15 }),
+      id: z.number().int(),
       status: z
-        .enum(["pending", "confirmed", "cancelled"])
-        .openapi({ example: "confirmed" }),
+        .enum(["pending", "confirmed", "cancelled"]),
       event: z.object({
-        id: z.number().int().openapi({ example: 42 }),
-        title: z.string().openapi({ example: "Mutirao de Inverno" }),
-        org: z.string().openapi({ example: "Instituto Vida" }),
-        startsAt: z.iso.datetime().openapi({ example: "2026-05-10T13:00:00.000Z" }),
+        id: z.number().int(),
+        title: z.string(),
+        org: z.string(),
+        startsAt: z.iso.datetime(),
       }),
     }),
   );
@@ -282,11 +252,11 @@ export function registerMeBoundaryContract(
     z.object({
       data: z.array(
         z.object({
-          eventId: z.number().int().openapi({ example: 42 }),
-          title: z.string().openapi({ example: "Mutirao de Inverno" }),
-          org: z.string().openapi({ example: "Instituto Vida" }),
-          startsAt: z.iso.datetime().openapi({ example: "2026-05-10T13:00:00.000Z" }),
-          dayLabel: z.string().openapi({ example: "10 de maio" }),
+          eventId: z.number().int(),
+          title: z.string(),
+          org: z.string(),
+          startsAt: z.iso.datetime(),
+          dayLabel: z.string(),
         }),
       ),
     }),
@@ -297,24 +267,16 @@ export function registerMeBoundaryContract(
     z.object({
       data: z.array(
         z.object({
-          id: z.string().openapi({ example: "42" }),
-          title: z.string().openapi({ example: "Mutirao de Inverno" }),
+          id: z.string(),
+          title: z.string(),
           filter: z
-            .enum(["upcoming", "past", "ongoing"])
-            .openapi({ example: "upcoming" }),
-          statusLabel: z.string().openapi({ example: "Publicado" }),
-          description: z
-            .string()
-            .openapi({
-              example: "Acao solidaria para arrecadacao e distribuicao.",
-            }),
-          imageClassName: z
-            .string()
-            .openapi({ example: "from-teal-600 to-cyan-500" }),
-          startsAt: z.iso.datetime().openapi({ example: "2026-05-10T13:00:00.000Z" }),
+            .enum(["upcoming", "past", "ongoing"]),
+          statusLabel: z.string(),
+          description: z.string(),
+          imageClassName: z.string(),
+          startsAt: z.iso.datetime(),
           status: z
-            .enum(["draft", "published", "cancelled"])
-            .openapi({ example: "published" }),
+            .enum(["draft", "published", "cancelled"]),
         }),
       ),
     }),
@@ -323,42 +285,31 @@ export function registerMeBoundaryContract(
   const organizerEventSchema = registry.register(
     "OrganizerEvent",
     z.object({
-      id: z.number().int().openapi({ example: 42 }),
-      organizer_id: z.number().int().openapi({ example: 9 }),
-      title: z.string().openapi({ example: "Mutirao de Inverno" }),
-      summary: z
-        .string()
-        .openapi({
-          example: "Acao solidaria para arrecadacao e distribuicao.",
-        }),
+      id: z.number().int(),
+      organizer_id: z.number().int(),
+      title: z.string(),
+      summary: z.string(),
       description: z
         .string()
-        .nullable()
-        .openapi({ example: "Traga agasalhos e itens de higiene." }),
+        .nullable(),
       rules_terms: z
         .string()
-        .nullable()
-        .openapi({ example: "Uso obrigatorio de cracha." }),
-      starts_at: z.iso.datetime().openapi({ example: "2026-05-10T13:00:00.000Z" }),
-      ends_at: z.iso.datetime().nullable().openapi({ example: "2026-05-10T18:00:00.000Z" }),
+        .nullable(),
+      starts_at: z.iso.datetime(),
+      ends_at: z.iso.datetime().nullable(),
       location_name: z
         .string()
-        .nullable()
-        .openapi({ example: "Centro Comunitario Bela Vista" }),
-      is_remote: z.boolean().openapi({ example: false }),
-      capacity: z.number().int().nullable().openapi({ example: 120 }),
-      cover_image_url: z.url().nullable().openapi({
-        example: "https://cdn.amparian.com/events/42-cover.jpg",
-      }),
+        .nullable(),
+      is_remote: z.boolean(),
+      capacity: z.number().int().nullable(),
+      cover_image_url: z.url().nullable(),
       highlight_skill: z
         .string()
-        .nullable()
-        .openapi({ example: "Organizacao de equipes" }),
+        .nullable(),
       status: z
-        .enum(["draft", "published", "cancelled"])
-        .openapi({ example: "draft" }),
-      created_at: z.iso.datetime().optional().openapi({ example: "2026-04-20T12:00:00.000Z" }),
-      updated_at: z.iso.datetime().optional().openapi({ example: "2026-04-22T20:30:00.000Z" }),
+        .enum(["draft", "published", "cancelled"]),
+      created_at: z.iso.datetime().optional(),
+      updated_at: z.iso.datetime().optional(),
       types: z.array(shared.lookupOptionSchema),
       requirements: z.array(shared.lookupOptionSchema),
       computedStatus: z
@@ -369,8 +320,7 @@ export function registerMeBoundaryContract(
           "upcoming",
           "ongoing",
           "past",
-        ])
-        .openapi({ example: "draft" }),
+        ]),
     }),
   );
 
@@ -379,16 +329,15 @@ export function registerMeBoundaryContract(
     z.object({
       data: z.array(
         z.object({
-          id: z.string().openapi({ example: "15" }),
-          name: z.string().openapi({ example: "Ana Souza" }),
-          role: z.string().openapi({ example: "Voluntario de apoio" }),
-          email: z.email().openapi({ example: "ana@amparian.com" }),
-          phone: z.string().openapi({ example: "+55 11 99999-9999" }),
-          cityUf: z.string().openapi({ example: "Sao Paulo / SP" }),
-          registrationDate: z.iso.datetime().openapi({ example: "2026-04-22T20:30:00.000Z" }),
+          id: z.string(),
+          name: z.string(),
+          role: z.string(),
+          email: z.email(),
+          phone: z.string(),
+          cityUf: z.string(),
+          registrationDate: z.iso.datetime(),
           status: z
-            .enum(["pending", "confirmed", "cancelled"])
-            .openapi({ example: "pending" }),
+            .enum(["pending", "confirmed", "cancelled"]),
         }),
       ),
     }),
@@ -397,10 +346,9 @@ export function registerMeBoundaryContract(
   const updateRegistrationStatusSchema = registry.register(
     "UpdateRegistrationStatusResponse",
     z.object({
-      id: z.number().int().openapi({ example: 15 }),
+      id: z.number().int(),
       status: z
-        .enum(["pending", "confirmed", "cancelled"])
-        .openapi({ example: "confirmed" }),
+        .enum(["pending", "confirmed", "cancelled"]),
     }),
   );
 
@@ -408,7 +356,7 @@ export function registerMeBoundaryContract(
     method: "get",
     path: "/me",
     tags: ["me"],
-    summary: "Retorna o perfil do usuario autenticado.",
+    summary: "Retorna o perfil do usuário autenticado.",
     security: [shared.cookieAuthSecurity],
     responses: {
       "200": {
@@ -416,11 +364,11 @@ export function registerMeBoundaryContract(
         content: { "application/json": { schema: shared.userSchema } },
       },
       "401": {
-        description: "Autenticacao necessaria.",
+        description: "Autenticação necessária.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "404": {
-        description: "Usuario nao encontrado.",
+        description: "Usuário não encontrado.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "500": {
@@ -434,7 +382,7 @@ export function registerMeBoundaryContract(
     method: "patch",
     path: "/me",
     tags: ["me"],
-    summary: "Atualiza parcialmente o perfil do usuario autenticado.",
+    summary: "Atualiza parcialmente o perfil do usuário autenticado.",
     security: [shared.cookieAuthSecurity],
     request: {
       body: {
@@ -452,15 +400,15 @@ export function registerMeBoundaryContract(
         content: { "application/json": { schema: shared.userSchema } },
       },
       "400": {
-        description: "Payload invalido.",
+        description: "Payload inválido.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "401": {
-        description: "Autenticacao necessaria.",
+        description: "Autenticação necessária.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "404": {
-        description: "Usuario nao encontrado.",
+        description: "Usuário não encontrado.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "500": {
@@ -474,19 +422,19 @@ export function registerMeBoundaryContract(
     method: "get",
     path: "/me/stats",
     tags: ["me"],
-    summary: "Retorna os indicadores do usuario autenticado.",
+    summary: "Retorna os indicadores do usuário autenticado.",
     security: [shared.cookieAuthSecurity],
     responses: {
       "200": {
-        description: "Estatisticas carregadas.",
+        description: "Estatísticas carregadas.",
         content: { "application/json": { schema: profileStatsSchema } },
       },
       "401": {
-        description: "Autenticacao necessaria.",
+        description: "Autenticação necessária.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "404": {
-        description: "Usuario nao encontrado.",
+        description: "Usuário não encontrado.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "500": {
@@ -500,22 +448,22 @@ export function registerMeBoundaryContract(
     method: "get",
     path: "/me/registrations",
     tags: ["me"],
-    summary: "Lista as inscricoes do usuario autenticado.",
+    summary: "Lista as inscrições do usuário autenticado.",
     security: [shared.cookieAuthSecurity],
     request: {
       query: meRegistrationsQuerySchema,
     },
     responses: {
       "200": {
-        description: "Inscricoes carregadas.",
+        description: "Inscrições carregadas.",
         content: { "application/json": { schema: myRegistrationsSchema } },
       },
       "400": {
-        description: "Query invalida.",
+        description: "Query inválida.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "401": {
-        description: "Autenticacao necessaria.",
+        description: "Autenticação necessária.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "500": {
@@ -529,7 +477,7 @@ export function registerMeBoundaryContract(
     method: "delete",
     path: "/me/registrations/{registrationId}",
     tags: ["me"],
-    summary: "Cancela uma inscricao do usuario autenticado.",
+    summary: "Cancela uma inscrição do usuário autenticado.",
     security: [shared.cookieAuthSecurity],
     request: {
       params: z.object({
@@ -538,18 +486,18 @@ export function registerMeBoundaryContract(
     },
     responses: {
       "204": {
-        description: "Inscricao cancelada.",
+        description: "Inscrição cancelada.",
       },
       "400": {
-        description: "Path param invalido.",
+        description: "Path param inválido.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "401": {
-        description: "Autenticacao necessaria.",
+        description: "Autenticação necessária.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "404": {
-        description: "Inscricao nao encontrada.",
+        description: "Inscrição não encontrada.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "500": {
@@ -563,7 +511,7 @@ export function registerMeBoundaryContract(
     method: "get",
     path: "/me/agenda",
     tags: ["me"],
-    summary: "Retorna a agenda mensal do usuario autenticado.",
+    summary: "Retorna a agenda mensal do usuário autenticado.",
     security: [shared.cookieAuthSecurity],
     request: {
       query: meAgendaQuerySchema,
@@ -574,11 +522,11 @@ export function registerMeBoundaryContract(
         content: { "application/json": { schema: agendaSchema } },
       },
       "400": {
-        description: "Query invalida.",
+        description: "Query inválida.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "401": {
-        description: "Autenticacao necessaria.",
+        description: "Autenticação necessária.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "500": {
@@ -603,11 +551,11 @@ export function registerMeBoundaryContract(
         content: { "application/json": { schema: organizerListEventsSchema } },
       },
       "400": {
-        description: "Query invalida.",
+        description: "Query inválida.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "401": {
-        description: "Autenticacao necessaria.",
+        description: "Autenticação necessária.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "500": {
@@ -639,11 +587,11 @@ export function registerMeBoundaryContract(
         content: { "application/json": { schema: organizerEventSchema } },
       },
       "400": {
-        description: "Payload invalido ou regras de negocio nao atendidas.",
+        description: "Payload inválido ou regras de negócio não atendidas.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "401": {
-        description: "Autenticacao necessaria.",
+        description: "Autenticação necessária.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "500": {
@@ -657,7 +605,7 @@ export function registerMeBoundaryContract(
     method: "get",
     path: "/me/events/{eventId}/registrations",
     tags: ["me"],
-    summary: "Lista inscricoes de um evento do organizador autenticado.",
+    summary: "Lista inscrições de um evento do organizador autenticado.",
     security: [shared.cookieAuthSecurity],
     request: {
       params: z.object({
@@ -666,21 +614,21 @@ export function registerMeBoundaryContract(
     },
     responses: {
       "200": {
-        description: "Inscricoes do evento carregadas.",
+        description: "Inscrições do evento carregadas.",
         content: {
           "application/json": { schema: organizerRegistrationsSchema },
         },
       },
       "400": {
-        description: "Path param invalido.",
+        description: "Path param inválido.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "401": {
-        description: "Autenticacao necessaria.",
+        description: "Autenticação necessária.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "404": {
-        description: "Evento nao encontrado.",
+        description: "Evento não encontrado.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "500": {
@@ -694,7 +642,7 @@ export function registerMeBoundaryContract(
     method: "patch",
     path: "/me/events/{eventId}/registrations/{registrationId}",
     tags: ["me"],
-    summary: "Atualiza o status de uma inscricao em evento do organizador.",
+    summary: "Atualiza o status de uma inscrição em evento do organizador.",
     security: [shared.cookieAuthSecurity],
     request: {
       params: z.object({
@@ -718,15 +666,15 @@ export function registerMeBoundaryContract(
         },
       },
       "400": {
-        description: "Payload ou params invalidos.",
+        description: "Payload ou params inválidos.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "401": {
-        description: "Autenticacao necessaria.",
+        description: "Autenticação necessária.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "404": {
-        description: "Evento ou inscricao nao encontrados.",
+        description: "Evento ou inscrição não encontrados.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "500": {
@@ -753,15 +701,15 @@ export function registerMeBoundaryContract(
         content: { "application/json": { schema: organizerEventSchema } },
       },
       "400": {
-        description: "Path param invalido.",
+        description: "Path param inválido.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "401": {
-        description: "Autenticacao necessaria.",
+        description: "Autenticação necessária.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "404": {
-        description: "Evento nao encontrado.",
+        description: "Evento não encontrado.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "500": {
@@ -788,15 +736,15 @@ export function registerMeBoundaryContract(
         content: { "application/json": { schema: organizerEventSchema } },
       },
       "400": {
-        description: "Path param invalido.",
+        description: "Path param inválido.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "401": {
-        description: "Autenticacao necessaria.",
+        description: "Autenticação necessária.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "404": {
-        description: "Evento nao encontrado.",
+        description: "Evento não encontrado.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "500": {
@@ -831,15 +779,15 @@ export function registerMeBoundaryContract(
         content: { "application/json": { schema: organizerEventSchema } },
       },
       "400": {
-        description: "Payload ou path param invalidos.",
+        description: "Payload ou path param inválidos.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "401": {
-        description: "Autenticacao necessaria.",
+        description: "Autenticação necessária.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "404": {
-        description: "Evento nao encontrado.",
+        description: "Evento não encontrado.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "500": {
@@ -865,15 +813,15 @@ export function registerMeBoundaryContract(
         description: "Evento removido.",
       },
       "400": {
-        description: "Path param invalido.",
+        description: "Path param inválido.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "401": {
-        description: "Autenticacao necessaria.",
+        description: "Autenticação necessária.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "404": {
-        description: "Evento nao encontrado.",
+        description: "Evento não encontrado.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "500": {
