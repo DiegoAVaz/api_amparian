@@ -70,7 +70,7 @@ export const authController = {
   }),
 
   logout: wrapAsync(async (req: Request, res: Response) => {
-    const body = logoutBodySchema.parse(req.body);
+    const body = logoutBodySchema.parse(req.body ?? {});
     const refreshToken =
       body.refreshToken ?? readCookie(req, REFRESH_COOKIE_NAME);
     await getContainer().logoutUser.execute(refreshToken);

@@ -5,12 +5,16 @@ import { firstCount } from "../utils/knex-helpers";
 export class RegistrationRepository {
   constructor(private readonly db: Knex) {}
 
-  async findByEventAndUser(eventId: number, userId: number): Promise<EventRegistrationRecord | undefined> {
-    return this.db<EventRegistrationRecord>("event_registrations").where({ event_id: eventId, user_id: userId }).first();
+  async findByEventAndUser(
+    eventId: number,
+    userId: number,
+    db: Knex = this.db,
+  ): Promise<EventRegistrationRecord | undefined> {
+    return db<EventRegistrationRecord>("event_registrations").where({ event_id: eventId, user_id: userId }).first();
   }
 
-  async countActiveByEvent(eventId: number): Promise<number> {
-    const countRows = await this.db("event_registrations")
+  async countActiveByEvent(eventId: number, db: Knex = this.db): Promise<number> {
+    const countRows = await db("event_registrations")
       .where({ event_id: eventId })
       .whereIn("status", ["pending", "confirmed"])
       .count("* as count");
@@ -23,8 +27,8 @@ export class RegistrationRepository {
     status: RegistrationStatus;
     participant_role: string | null;
     agreed_responsibility_at: Date | null;
-  }): Promise<number> {
-    const insertResult = await this.db("event_registrations").insert(input);
+  }, db: Knex = this.db): Promise<number> {
+    const insertResult = await db("event_registrations").insert(input);
     return Number(Array.isArray(insertResult) ? insertResult[0] : insertResult);
   }
 
