@@ -1,6 +1,5 @@
 import { type OpenAPIRegistry } from "@asteasolutions/zod-to-openapi";
 import { z } from "../docs/zod-openapi";
-import { ACCESS_COOKIE_NAME, REFRESH_COOKIE_NAME } from "../utils/auth-cookies";
 
 const errorItemSchema = z.object({
   code: z.string(),
@@ -100,13 +99,11 @@ export function registerSharedBoundaryComponents(registry: OpenAPIRegistry) {
     }),
   );
 
-  const cookieAuth = registry.registerComponent("securitySchemes", "cookieAuth", {
-    type: "apiKey",
-    in: "cookie",
-    name: ACCESS_COOKIE_NAME,
-    description:
-      "Cookie HTTP-only principal da sessão. O refresh usa o cookie "
-      + `${REFRESH_COOKIE_NAME} nos fluxos de autenticação.`,
+  const bearerAuth = registry.registerComponent("securitySchemes", "bearerAuth", {
+    type: "http",
+    scheme: "bearer",
+    bearerFormat: "JWT",
+    description: "JWT de acesso enviado no header Authorization como Bearer token.",
   });
 
   registry.registerPath({
@@ -146,8 +143,8 @@ export function registerSharedBoundaryComponents(registry: OpenAPIRegistry) {
   });
 
   return {
-    cookieAuth,
-    cookieAuthSecurity: { cookieAuth: [] as string[] },
+    bearerAuth,
+    bearerAuthSecurity: { bearerAuth: [] as string[] },
     errorEnvelopeSchema,
     eventIdParam,
     healthSchema,

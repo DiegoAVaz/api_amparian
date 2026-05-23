@@ -357,7 +357,7 @@ export function registerMeBoundaryContract(
     path: "/me",
     tags: ["me"],
     summary: "Retorna o perfil do usuário autenticado.",
-    security: [shared.cookieAuthSecurity],
+    security: [shared.bearerAuthSecurity],
     responses: {
       "200": {
         description: "Perfil carregado.",
@@ -383,7 +383,7 @@ export function registerMeBoundaryContract(
     path: "/me",
     tags: ["me"],
     summary: "Atualiza parcialmente o perfil do usuário autenticado.",
-    security: [shared.cookieAuthSecurity],
+    security: [shared.bearerAuthSecurity],
     request: {
       body: {
         required: true,
@@ -423,7 +423,7 @@ export function registerMeBoundaryContract(
     path: "/me/stats",
     tags: ["me"],
     summary: "Retorna os indicadores do usuário autenticado.",
-    security: [shared.cookieAuthSecurity],
+    security: [shared.bearerAuthSecurity],
     responses: {
       "200": {
         description: "Estatísticas carregadas.",
@@ -449,7 +449,7 @@ export function registerMeBoundaryContract(
     path: "/me/registrations",
     tags: ["me"],
     summary: "Lista as inscrições do usuário autenticado.",
-    security: [shared.cookieAuthSecurity],
+    security: [shared.bearerAuthSecurity],
     request: {
       query: meRegistrationsQuerySchema,
     },
@@ -478,7 +478,7 @@ export function registerMeBoundaryContract(
     path: "/me/registrations/{registrationId}",
     tags: ["me"],
     summary: "Cancela uma inscrição do usuário autenticado.",
-    security: [shared.cookieAuthSecurity],
+    security: [shared.bearerAuthSecurity],
     request: {
       params: z.object({
         registrationId: shared.registrationIdParam,
@@ -512,7 +512,7 @@ export function registerMeBoundaryContract(
     path: "/me/agenda",
     tags: ["me"],
     summary: "Retorna a agenda mensal do usuário autenticado.",
-    security: [shared.cookieAuthSecurity],
+    security: [shared.bearerAuthSecurity],
     request: {
       query: meAgendaQuerySchema,
     },
@@ -541,7 +541,7 @@ export function registerMeBoundaryContract(
     path: "/me/events",
     tags: ["me"],
     summary: "Lista eventos do organizador autenticado.",
-    security: [shared.cookieAuthSecurity],
+    security: [shared.bearerAuthSecurity],
     request: {
       query: meEventsFilterQuerySchema,
     },
@@ -570,7 +570,7 @@ export function registerMeBoundaryContract(
     path: "/me/events",
     tags: ["me"],
     summary: "Cria um novo evento para o organizador autenticado.",
-    security: [shared.cookieAuthSecurity],
+    security: [shared.bearerAuthSecurity],
     request: {
       body: {
         required: true,
@@ -606,7 +606,7 @@ export function registerMeBoundaryContract(
     path: "/me/events/{eventId}/registrations",
     tags: ["me"],
     summary: "Lista inscrições de um evento do organizador autenticado.",
-    security: [shared.cookieAuthSecurity],
+    security: [shared.bearerAuthSecurity],
     request: {
       params: z.object({
         eventId: shared.eventIdParam,
@@ -643,7 +643,7 @@ export function registerMeBoundaryContract(
     path: "/me/events/{eventId}/registrations/{registrationId}",
     tags: ["me"],
     summary: "Atualiza o status de uma inscrição em evento do organizador.",
-    security: [shared.cookieAuthSecurity],
+    security: [shared.bearerAuthSecurity],
     request: {
       params: z.object({
         eventId: shared.eventIdParam,
@@ -689,7 +689,7 @@ export function registerMeBoundaryContract(
     path: "/me/events/{eventId}/publish",
     tags: ["me"],
     summary: "Publica um evento do organizador autenticado.",
-    security: [shared.cookieAuthSecurity],
+    security: [shared.bearerAuthSecurity],
     request: {
       params: z.object({
         eventId: shared.eventIdParam,
@@ -724,7 +724,7 @@ export function registerMeBoundaryContract(
     path: "/me/events/{eventId}",
     tags: ["me"],
     summary: "Retorna os detalhes de um evento do organizador autenticado.",
-    security: [shared.cookieAuthSecurity],
+    security: [shared.bearerAuthSecurity],
     request: {
       params: z.object({
         eventId: shared.eventIdParam,
@@ -759,7 +759,7 @@ export function registerMeBoundaryContract(
     path: "/me/events/{eventId}",
     tags: ["me"],
     summary: "Atualiza parcialmente um evento do organizador autenticado.",
-    security: [shared.cookieAuthSecurity],
+    security: [shared.bearerAuthSecurity],
     request: {
       params: z.object({
         eventId: shared.eventIdParam,
@@ -802,7 +802,7 @@ export function registerMeBoundaryContract(
     path: "/me/events/{eventId}",
     tags: ["me"],
     summary: "Remove um evento do organizador autenticado.",
-    security: [shared.cookieAuthSecurity],
+    security: [shared.bearerAuthSecurity],
     request: {
       params: z.object({
         eventId: shared.eventIdParam,

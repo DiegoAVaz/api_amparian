@@ -1,22 +1,18 @@
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
-import swaggerUi from "swagger-ui-express";
 import { env } from "./config/env";
 import { openApiDocument } from "./docs/openapi";
 import { errorHandler } from "./middlewares/error-handler";
 import { apiV1Router } from "./routes";
+import { swaggerHtml } from "./docs/swaggerHtml";
 
 function allowSwaggerUi(
   req: express.Request,
   res: express.Response,
   next: express.NextFunction,
 ) {
-  if (
-    req.path === "/" ||
-    req.path.startsWith("/swagger-ui") ||
-    req.path.startsWith("/favicon")
-  ) {
+  if (req.path === "/docs") {
     res.removeHeader("Content-Security-Policy");
   }
   next();
@@ -71,7 +67,6 @@ function createApiCorsOptions(
   return (req, callback) => {
     callback(null, {
       origin: isAllowedApiOrigin(req, allowlistedOrigins, req.headers.origin),
-      credentials: true,
     });
   };
 }
@@ -125,18 +120,10 @@ export function createApp() {
     app.get("/openapi.json", (_req, res) => {
       res.json(openApiDocument);
     });
-    app.use("/", allowSwaggerUi, swaggerUi.serve);
-    app.get(
-      "/",
-      allowSwaggerUi,
-      swaggerUi.setup(openApiDocument, {
-        customSiteTitle: "Amparian API Docs",
-        explorer: true,
-        swaggerOptions: {
-          withCredentials: true,
-        },
-      }),
-    );
+
+    app.get("/docs", allowSwaggerUi, (_req, res) => {
+      res.type("html").send(swaggerHtml());
+    });
   }
 
   app.use(
@@ -150,4 +137,3 @@ export function createApp() {
 
   return app;
 }
-

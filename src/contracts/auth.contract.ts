@@ -1,6 +1,5 @@
 import { type OpenAPIRegistry } from "@asteasolutions/zod-to-openapi";
 import { z } from "../docs/zod-openapi";
-import { ACCESS_COOKIE_NAME, REFRESH_COOKIE_NAME } from "../utils/auth-cookies";
 import type { SharedBoundaryComponents } from "./shared.contract";
 
 export const strongPasswordBoundarySchema = z
@@ -31,8 +30,7 @@ export const loginBodySchema = z.object({
 export const refreshBodySchema = z.object({
   refreshToken: z
     .string()
-    .min(1)
-    .optional(),
+    .min(1),
 });
 
 export const logoutBodySchema = z.object({
@@ -57,7 +55,27 @@ export function registerAuthBoundaryContract(
   const authResponseSchema = registry.register(
     "AuthResponse",
     z.object({
+      accessToken: z.string().min(1).openapi({
+        description: "JWT de acesso usado no header Authorization Bearer.",
+      }),
+      refreshToken: z.string().min(1).openapi({
+        description: "Token de renovação armazenado pelo cliente.",
+      }),
       user: shared.userSchema,
+      expiresIn: z.number().int().openapi({
+        description: "Tempo de expiração do access token, em segundos.",
+      }),
+    }),
+  );
+  const refreshResponseSchema = registry.register(
+    "RefreshResponse",
+    z.object({
+      accessToken: z.string().min(1).openapi({
+        description: "Novo JWT de acesso usado no header Authorization Bearer.",
+      }),
+      refreshToken: z.string().min(1).openapi({
+        description: "Novo token de renovação armazenado pelo cliente.",
+      }),
       expiresIn: z.number().int().openapi({
         description: "Tempo de expiração do access token, em segundos.",
       }),
@@ -70,16 +88,11 @@ export function registerAuthBoundaryContract(
     }),
   );
 
-  const setCookieHeader = {
-    description: "Cookies HTTP-only usados pela sessão.",
-    schema: { type: "string" as const },
-  };
-
   registry.registerPath({
     method: "post",
     path: "/auth/register",
     tags: ["auth"],
-    summary: "Cria uma conta e inicia sessão por cookies.",
+    summary: "Cria uma conta e retorna os tokens da sessão.",
     security: [],
     request: {
       body: {
@@ -94,12 +107,6 @@ export function registerAuthBoundaryContract(
     responses: {
       "201": {
         description: "Conta criada com sucesso.",
-        headers: {
-          "Set-Cookie": {
-            ...setCookieHeader,
-            example: `${ACCESS_COOKIE_NAME}=...; Path=/; HttpOnly`,
-          },
-        },
         content: {
           "application/json": {
             schema: authResponseSchema,
@@ -125,7 +132,7 @@ export function registerAuthBoundaryContract(
     method: "post",
     path: "/auth/login",
     tags: ["auth"],
-    summary: "Autentica usuário e define cookies HTTP-only da sessão.",
+    summary: "Autentica usuário e retorna os tokens da sessão.",
     security: [],
     request: {
       body: {
@@ -140,12 +147,6 @@ export function registerAuthBoundaryContract(
     responses: {
       "200": {
         description: "Login efetuado com sucesso.",
-        headers: {
-          "Set-Cookie": {
-            ...setCookieHeader,
-            example: `${ACCESS_COOKIE_NAME}=...; Path=/; HttpOnly`,
-          },
-        },
         content: {
           "application/json": {
             schema: authResponseSchema,
@@ -171,12 +172,11 @@ export function registerAuthBoundaryContract(
     method: "post",
     path: "/auth/refresh",
     tags: ["auth"],
-    summary: "Renova a sessão usando o refresh token do cookie ou do corpo.",
-    description: `O fluxo principal usa o cookie ${REFRESH_COOKIE_NAME}. O corpo só existe como fallback técnico.`,
+    summary: "Renova a sessão usando o refresh token enviado no corpo.",
     security: [],
     request: {
       body: {
-        required: false,
+        required: true,
         content: {
           "application/json": {
             schema: refreshBodySchema,
@@ -185,12 +185,11 @@ export function registerAuthBoundaryContract(
       },
     },
     responses: {
-      "204": {
-        description: "Sessão renovada e cookies atualizados.",
-        headers: {
-          "Set-Cookie": {
-            ...setCookieHeader,
-            example: `${REFRESH_COOKIE_NAME}=...; Path=/; HttpOnly`,
+      "200": {
+        description: "Sessão renovada e tokens atualizados.",
+        content: {
+          "application/json": {
+            schema: refreshResponseSchema,
           },
         },
       },
@@ -213,7 +212,7 @@ export function registerAuthBoundaryContract(
     method: "post",
     path: "/auth/logout",
     tags: ["auth"],
-    summary: "Encerra a sessão e limpa os cookies de autenticação.",
+    summary: "Encerra a sessão revogando o refresh token informado.",
     security: [],
     request: {
       body: {
@@ -228,12 +227,6 @@ export function registerAuthBoundaryContract(
     responses: {
       "204": {
         description: "Sessão encerrada.",
-        headers: {
-          "Set-Cookie": {
-            ...setCookieHeader,
-            example: `${ACCESS_COOKIE_NAME}=; Path=/; Max-Age=0; HttpOnly`,
-          },
-        },
       },
       "400": {
         description: "Falha de validação do payload.",

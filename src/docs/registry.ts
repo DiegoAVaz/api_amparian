@@ -39,7 +39,7 @@ export function generateOpenApiDocument() {
       {
         name: "auth",
         description:
-          "Autenticação baseada em cookies HTTP-only. Login, registro e refresh definem os cookies de sessão no navegador.",
+          "Autenticação baseada em Bearer token. Login, registro e refresh retornam tokens para o cliente.",
       },
       {
         name: "lookups",

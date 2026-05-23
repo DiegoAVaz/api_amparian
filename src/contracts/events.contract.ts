@@ -181,8 +181,8 @@ export function registerEventsBoundaryContract(
     tags: ["events"],
     summary: "Inscreve o usuário autenticado em um evento publicado.",
     description:
-      "Endpoint privado. O navegador envia automaticamente o cookie de sessão após login.",
-    security: [shared.cookieAuthSecurity],
+      "Endpoint privado. Envie o JWT de acesso no header Authorization Bearer.",
+    security: [shared.bearerAuthSecurity],
     request: {
       params: z.object({
         eventId: shared.eventIdParam,
