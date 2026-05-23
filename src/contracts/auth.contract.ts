@@ -15,7 +15,7 @@ export const strongPasswordBoundarySchema = z
       "Mínimo de 8 caracteres, com letra maiúscula, minúscula, número e caractere especial.",
   });
 
-const emailBoundarySchema = z
+export const emailBoundarySchema = z
   .string()
   .trim()
   .toLowerCase()
@@ -46,6 +46,27 @@ const optionalPhoneBoundarySchema = z.preprocess(
     .optional(),
 );
 
+const requiredTokenBoundarySchema = z
+  .string()
+  .trim()
+  .min(1, { error: "O token é obrigatório" })
+  .max(512, { error: "O token deve ter no máximo 512 caracteres" });
+
+const optionalTokenBoundarySchema = z.preprocess(
+  (value) => {
+    if (typeof value !== "string") {
+      return value;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  },
+  z
+    .string()
+    .max(512, { error: "O token deve ter no máximo 512 caracteres" })
+    .optional(),
+);
+
 export const registerBodySchema = z.object({
   email: emailBoundarySchema,
   password: strongPasswordBoundarySchema,
@@ -54,28 +75,27 @@ export const registerBodySchema = z.object({
 });
 
 export const loginBodySchema = z.object({
-  email: z.email(),
-  password: z.string().min(1),
+  email: emailBoundarySchema,
+  password: z
+    .string()
+    .min(1, { error: "A senha é obrigatória" })
+    .max(72, { error: "A senha deve ter no máximo 72 caracteres" }),
 });
 
 export const refreshBodySchema = z.object({
-  refreshToken: z
-    .string()
-    .min(1),
+  refreshToken: requiredTokenBoundarySchema,
 });
 
 export const logoutBodySchema = z.object({
-  refreshToken: z
-    .string()
-    .optional(),
+  refreshToken: optionalTokenBoundarySchema,
 });
 
 export const forgotPasswordBodySchema = z.object({
-  email: z.email(),
+  email: emailBoundarySchema,
 });
 
 export const resetPasswordBodySchema = z.object({
-  token: z.string().min(1),
+  token: requiredTokenBoundarySchema,
   newPassword: strongPasswordBoundarySchema,
 });
 

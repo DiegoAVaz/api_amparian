@@ -58,10 +58,10 @@ export class LoginUserUseCase {
 
   async execute(input: { email: string; password: string }) {
     const row = await this.users.findByEmailWithPassword(input.email);
-    if (!row) throw new HttpError(400, "INVALID_CREDENTIALS", "E-mail ou senha incorretos");
+    if (!row) throw new HttpError(401, "INVALID_CREDENTIALS", "E-mail ou senha incorretos");
 
     const ok = await bcrypt.compare(input.password, row.password_hash);
-    if (!ok) throw new HttpError(400, "INVALID_CREDENTIALS", "E-mail ou senha incorretos");
+    if (!ok) throw new HttpError(401, "INVALID_CREDENTIALS", "E-mail ou senha incorretos");
 
     const pair = await this.tokens.createPair(row.id);
     const { password_hash: _, ...publicFields } = row;
@@ -77,9 +77,9 @@ export class RefreshSessionUseCase {
   async execute(refreshToken: string, meta?: { userAgent?: string; ip?: string }) {
     const token_hash = sha256Hex(refreshToken);
     const row = await this.refreshTokens.findByHash(token_hash);
-    if (!row || row.revoked_at) throw new HttpError(400, "INVALID_REFRESH", "Refresh inválido");
+    if (!row || row.revoked_at) throw new HttpError(401, "INVALID_REFRESH", "Refresh inválido");
 
-    if (new Date(row.expires_at) < new Date()) throw new HttpError(400, "INVALID_REFRESH", "Refresh expirado");
+    if (new Date(row.expires_at) < new Date()) throw new HttpError(401, "INVALID_REFRESH", "Refresh expirado");
 
     await this.refreshTokens.revokeById(row.id);
 
@@ -142,8 +142,8 @@ export class ResetPasswordUseCase {
   async execute(token: string, newPassword: string): Promise<void> {
     const token_hash = sha256Hex(token);
     const row = await this.passwordReset.findByHash(token_hash);
-    if (!row || row.used_at) throw new HttpError(400, "INVALID_TOKEN", "Token inválido ou expirado");
-    if (new Date(row.expires_at) < new Date()) throw new HttpError(400, "INVALID_TOKEN", "Token expirado");
+    if (!row || row.used_at) throw new HttpError(401, "INVALID_TOKEN", "Token inválido ou expirado");
+    if (new Date(row.expires_at) < new Date()) throw new HttpError(401, "INVALID_TOKEN", "Token expirado");
 
     const password_hash = await bcrypt.hash(newPassword, 10);
     await this.db.transaction(async (trx) => {
