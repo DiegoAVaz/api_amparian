@@ -15,11 +15,42 @@ export const strongPasswordBoundarySchema = z
       "Mínimo de 8 caracteres, com letra maiúscula, minúscula, número e caractere especial.",
   });
 
+const emailBoundarySchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .max(255, { error: "O e-mail deve ter no máximo 255 caracteres" })
+  .pipe(z.email({ error: "E-mail inválido" }));
+
+const nameBoundarySchema = z
+  .string()
+  .trim()
+  .min(2, { error: "O nome deve ter pelo menos 2 caracteres" })
+  .max(255, { error: "O nome deve ter no máximo 255 caracteres" });
+
+const optionalPhoneBoundarySchema = z.preprocess(
+  (value) => {
+    if (typeof value !== "string") {
+      return value;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  },
+  z
+    .string()
+    .max(32, { error: "O telefone deve ter no máximo 32 caracteres" })
+    .regex(/^[0-9()+\-\s]+$/, {
+      error: "O telefone deve conter apenas números, espaços e os caracteres ()+-",
+    })
+    .optional(),
+);
+
 export const registerBodySchema = z.object({
-  email: z.email(),
+  email: emailBoundarySchema,
   password: strongPasswordBoundarySchema,
-  name: z.string().min(1),
-  phone: z.string().optional(),
+  name: nameBoundarySchema,
+  phone: optionalPhoneBoundarySchema,
 });
 
 export const loginBodySchema = z.object({

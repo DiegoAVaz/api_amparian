@@ -3,13 +3,14 @@ import { authController } from "../controllers/auth.controller";
 import {
   authForgotPasswordLimiter,
   authLoginLimiter,
+  authRegisterLimiter,
   authRefreshLimiter,
   authResetPasswordLimiter,
 } from "../middlewares/auth-rate-limit";
 
 export const authRouter = Router();
 
-authRouter.post("/register", authController.register);
+authRouter.post("/register", authRegisterLimiter, authController.register);
 authRouter.post("/login", authLoginLimiter, authController.login);
 authRouter.post("/refresh", authRefreshLimiter, authController.refresh);
 authRouter.post("/logout", authController.logout);

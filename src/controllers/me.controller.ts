@@ -13,6 +13,7 @@ import {
 } from "../contracts/me.contract";
 import { getContainer } from "../di/container";
 import { wrapAsync } from "../middlewares/wrap";
+import { parseBody, parseParams, parseQuery } from "../utils/request-validation";
 
 export const meController = {
   getProfile: wrapAsync(async (req: Request, res: Response) => {
@@ -21,7 +22,7 @@ export const meController = {
   }),
 
   updateProfile: wrapAsync(async (req: Request, res: Response) => {
-    const body = meProfilePatchBodySchema.parse(req.body);
+    const body = parseBody(meProfilePatchBodySchema, req.body);
     const user = await getContainer().updateProfile.execute(req.userId!, {
       name: body.name,
       phone: body.phone,
@@ -40,31 +41,31 @@ export const meController = {
   }),
 
   listMyRegistrations: wrapAsync(async (req: Request, res: Response) => {
-    const q = meRegistrationsQuerySchema.parse(req.query);
+    const q = parseQuery(meRegistrationsQuerySchema, req.query);
     const result = await getContainer().listMyRegistrations.execute(req.userId!, q.page, q.limit);
     res.json(result);
   }),
 
   cancelRegistration: wrapAsync(async (req: Request, res: Response) => {
-    const { registrationId } = meRegistrationIdParamsSchema.parse(req.params);
+    const { registrationId } = parseParams(meRegistrationIdParamsSchema, req.params);
     await getContainer().cancelRegistration.execute(req.userId!, registrationId);
     res.status(204).send();
   }),
 
   agenda: wrapAsync(async (req: Request, res: Response) => {
-    const q = meAgendaQuerySchema.parse(req.query);
+    const q = parseQuery(meAgendaQuerySchema, req.query);
     const result = await getContainer().getMyAgenda.execute(req.userId!, q.year, q.month);
     res.json(result);
   }),
 
   listMyEvents: wrapAsync(async (req: Request, res: Response) => {
-    const q = meEventsFilterQuerySchema.parse(req.query);
+    const q = parseQuery(meEventsFilterQuerySchema, req.query);
     const result = await getContainer().listMyEvents.execute(req.userId!, q.filter);
     res.json(result);
   }),
 
   createEvent: wrapAsync(async (req: Request, res: Response) => {
-    const body = createEventBodySchema.parse(req.body);
+    const body = parseBody(createEventBodySchema, req.body);
     const result = await getContainer().createEvent.execute(req.userId!, {
       title: body.title,
       summary: body.summary,
@@ -85,14 +86,14 @@ export const meController = {
   }),
 
   listOrganizerRegistrations: wrapAsync(async (req: Request, res: Response) => {
-    const { eventId } = meEventIdParamsSchema.parse(req.params);
+    const { eventId } = parseParams(meEventIdParamsSchema, req.params);
     const result = await getContainer().listOrganizerRegistrations.execute(req.userId!, eventId);
     res.json(result);
   }),
 
   patchOrganizerRegistration: wrapAsync(async (req: Request, res: Response) => {
-    const { eventId, registrationId } = meEventRegistrationParamsSchema.parse(req.params);
-    const body = updateOrganizerRegistrationBodySchema.parse(req.body);
+    const { eventId, registrationId } = parseParams(meEventRegistrationParamsSchema, req.params);
+    const body = parseBody(updateOrganizerRegistrationBodySchema, req.body);
     const result = await getContainer().updateRegistrationStatus.execute(
       req.userId!,
       eventId,
@@ -103,20 +104,20 @@ export const meController = {
   }),
 
   publishEvent: wrapAsync(async (req: Request, res: Response) => {
-    const { eventId } = meEventIdParamsSchema.parse(req.params);
+    const { eventId } = parseParams(meEventIdParamsSchema, req.params);
     const result = await getContainer().publishEvent.execute(req.userId!, eventId);
     res.json(result);
   }),
 
   getOrganizerEvent: wrapAsync(async (req: Request, res: Response) => {
-    const { eventId } = meEventIdParamsSchema.parse(req.params);
+    const { eventId } = parseParams(meEventIdParamsSchema, req.params);
     const result = await getContainer().getOrganizerEvent.execute(req.userId!, eventId);
     res.json(result);
   }),
 
   patchOrganizerEvent: wrapAsync(async (req: Request, res: Response) => {
-    const { eventId } = meEventIdParamsSchema.parse(req.params);
-    const body = patchEventBodySchema.parse(req.body);
+    const { eventId } = parseParams(meEventIdParamsSchema, req.params);
+    const body = parseBody(patchEventBodySchema, req.body);
     const result = await getContainer().updateEvent.execute(req.userId!, eventId, {
       title: body.title,
       summary: body.summary,
@@ -137,7 +138,7 @@ export const meController = {
   }),
 
   deleteOrganizerEvent: wrapAsync(async (req: Request, res: Response) => {
-    const { eventId } = meEventIdParamsSchema.parse(req.params);
+    const { eventId } = parseParams(meEventIdParamsSchema, req.params);
     await getContainer().deleteEvent.execute(req.userId!, eventId);
     res.status(204).send();
   }),
