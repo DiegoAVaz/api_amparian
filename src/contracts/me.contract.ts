@@ -1,11 +1,12 @@
 import { type OpenAPIRegistry } from "@asteasolutions/zod-to-openapi";
 import { z } from "../docs/zod-openapi";
+import { nullableProfilePhoneSchema } from "./phone.contract";
 import type { SharedBoundaryComponents } from "./shared.contract";
 
 const httpUrlSchema = z
-  .string()
+  .url({ error: "URL inválida" })
   .trim()
-  .pipe(z.url({ error: "URL inválida" }))
+  .max(512, { error: "A URL deve ter no máximo 512 caracteres" })
   .refine(
     (value) => value.startsWith("http://") || value.startsWith("https://"),
     {
@@ -13,26 +14,78 @@ const httpUrlSchema = z
     },
   );
 
-export const meProfilePatchBodySchema = z.object({
-  name: z.string().min(1).optional(),
-  phone: z
+function nullableTrimmedString(
+  maxLength: number,
+  fieldLabel: string,
+  minLength?: number,
+) {
+  return z.preprocess(
+    (value) => {
+      if (value === null || value === undefined || typeof value !== "string") {
+        return value;
+      }
+
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    },
+    z
+      .string()
+      .min(minLength ?? 0, {
+        error: `O campo ${fieldLabel} deve ter pelo menos ${minLength ?? 0} caracteres`,
+      })
+      .max(maxLength, {
+        error: `O campo ${fieldLabel} deve ter no máximo ${maxLength} caracteres`,
+      })
+      .nullable()
+      .optional(),
+  );
+}
+
+const profileStateSchema = z.preprocess(
+  (value) => {
+    if (value === null || value === undefined || typeof value !== "string") {
+      return value;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed.toUpperCase() : null;
+  },
+  z
     .string()
+    .length(2, { error: "O estado deve ser informado como UF com 2 letras" })
+    .regex(/^[A-Z]{2}$/, { error: "O estado deve conter apenas letras" })
     .nullable()
     .optional(),
-  city: z.string().nullable().optional(),
-  state: z.string().length(2).nullable().optional(),
-  bio: z
-    .string()
-    .nullable()
-    .optional(),
-  publicOrganizationName: z
-    .string()
-    .nullable()
-    .optional(),
-  avatarUrl: httpUrlSchema
-    .nullable()
-    .optional(),
-});
+);
+
+export const meProfilePatchBodySchema = z
+  .object({
+    name: z
+      .string()
+      .trim()
+      .min(2, { error: "O nome deve ter pelo menos 2 caracteres" })
+      .max(255, { error: "O nome deve ter no máximo 255 caracteres" })
+      .optional(),
+    phone: nullableProfilePhoneSchema,
+    city: nullableTrimmedString(128, "cidade"),
+    state: profileStateSchema,
+    bio: nullableTrimmedString(5000, "bio"),
+    publicOrganizationName: nullableTrimmedString(255, "organização pública"),
+    avatarUrl: httpUrlSchema
+      .nullable()
+      .optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (Object.keys(value).length > 0) {
+      return;
+    }
+
+    ctx.addIssue({
+      code: "custom",
+      message: "Informe ao menos um campo para atualizar",
+      path: [],
+    });
+  });
 
 export const meRegistrationsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -114,7 +167,7 @@ export const createEventBodySchema = z
     const endsAt = new Date(value.endsAt).getTime();
     if (endsAt <= startsAt) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "endsAt deve ser maior que startsAt",
         path: ["endsAt"],
       });
@@ -185,7 +238,7 @@ export const patchEventBodySchema = z
     const endsAt = new Date(value.endsAt).getTime();
     if (endsAt <= startsAt) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "endsAt deve ser maior que startsAt",
         path: ["endsAt"],
       });

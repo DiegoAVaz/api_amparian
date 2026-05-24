@@ -1,5 +1,6 @@
 import { type OpenAPIRegistry } from "@asteasolutions/zod-to-openapi";
 import { z } from "../docs/zod-openapi";
+import { optionalRegisterPhoneSchema } from "./phone.contract";
 import type { SharedBoundaryComponents } from "./shared.contract";
 
 export const strongPasswordBoundarySchema = z
@@ -16,35 +17,16 @@ export const strongPasswordBoundarySchema = z
   });
 
 export const emailBoundarySchema = z
-  .string()
+  .email({ error: "E-mail inválido" })
   .trim()
   .toLowerCase()
-  .max(255, { error: "O e-mail deve ter no máximo 255 caracteres" })
-  .pipe(z.email({ error: "E-mail inválido" }));
+  .max(255, { error: "O e-mail deve ter no máximo 255 caracteres" });
 
 const nameBoundarySchema = z
   .string()
   .trim()
   .min(2, { error: "O nome deve ter pelo menos 2 caracteres" })
   .max(255, { error: "O nome deve ter no máximo 255 caracteres" });
-
-const optionalPhoneBoundarySchema = z.preprocess(
-  (value) => {
-    if (typeof value !== "string") {
-      return value;
-    }
-
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : undefined;
-  },
-  z
-    .string()
-    .max(32, { error: "O telefone deve ter no máximo 32 caracteres" })
-    .regex(/^[0-9()+\-\s]+$/, {
-      error: "O telefone deve conter apenas números, espaços e os caracteres ()+-",
-    })
-    .optional(),
-);
 
 const requiredTokenBoundarySchema = z
   .string()
@@ -71,7 +53,7 @@ export const registerBodySchema = z.object({
   email: emailBoundarySchema,
   password: strongPasswordBoundarySchema,
   name: nameBoundarySchema,
-  phone: optionalPhoneBoundarySchema,
+  phone: optionalRegisterPhoneSchema,
 });
 
 export const loginBodySchema = z.object({
