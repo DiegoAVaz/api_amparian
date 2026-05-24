@@ -66,7 +66,7 @@ export class GetOrganizerEventUseCase {
 
   async execute(userId: number, eventId: number) {
     const row = await this.events.findByOrganizerAndId(userId, eventId);
-    if (!row) throw new HttpError(404, "NOT_FOUND", "Evento não encontrado");
+    if (!row) throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
     const types = await this.events.findTypesForEvent(eventId);
     const requirements = await this.events.findRequirementsForEvent(eventId);
     const computed = computeEventStatus({

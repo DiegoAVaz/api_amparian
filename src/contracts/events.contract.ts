@@ -9,7 +9,8 @@ export const publicEventsListQuerySchema = z.object({
         return value;
       }
 
-      return value.trim();
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : undefined;
     },
     z
       .string()
@@ -26,12 +27,12 @@ export const publicEventsListQuerySchema = z.object({
       }),
   ),
   page: z.coerce
-    .number()
+    .number({ error: "A página deve ser um número" })
     .int({ error: "A página deve ser um número inteiro" })
     .min(1, { error: "A página deve ser maior ou igual a 1" })
     .default(1),
   limit: z.coerce
-    .number()
+    .number({ error: "O limite deve ser um número" })
     .int({ error: "O limite deve ser um número inteiro" })
     .min(1, { error: "O limite deve ser maior ou igual a 1" })
     .max(100, { error: "O limite deve ser no máximo 100" })
@@ -39,7 +40,10 @@ export const publicEventsListQuerySchema = z.object({
 });
 
 export const publicEventIdParamsSchema = z.object({
-  eventId: z.coerce.number().int().positive(),
+  eventId: z.coerce
+    .number({ error: "O ID do evento deve ser um número" })
+    .int({ error: "O ID do evento deve ser um número inteiro" })
+    .positive({ error: "O ID do evento deve ser maior que 0" }),
 });
 
 export const eventRegistrationBodySchema = z.object({
@@ -53,7 +57,7 @@ export const eventRegistrationBodySchema = z.object({
       return trimmed.length > 0 ? trimmed : undefined;
     },
     z
-      .string()
+      .string({ error: "A função do participante deve ser texto" })
       .max(255, {
         error: "A função do participante deve ter no máximo 255 caracteres",
       })
@@ -228,7 +232,7 @@ export function registerEventsBoundaryContract(
         },
       },
       "400": {
-        description: "Payload inválido ou regra de negócio não atendida.",
+        description: "Payload ou path param inválidos.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "401": {
@@ -241,6 +245,10 @@ export function registerEventsBoundaryContract(
       },
       "409": {
         description: "Usuário já inscrito no evento.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      "422": {
+        description: "Inscrição não pode ser criada no estado atual do evento.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "500": {

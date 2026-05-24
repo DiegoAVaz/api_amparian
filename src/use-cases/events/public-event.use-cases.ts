@@ -138,7 +138,7 @@ export class RegisterForEventUseCase {
 
         if (!body.agreedResponsibility) {
           throw new HttpError(
-            422,
+            400,
             "TERMS_REQUIRED",
             "É necessário aceitar o termo de responsabilidade",
           );

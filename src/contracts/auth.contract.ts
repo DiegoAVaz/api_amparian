@@ -16,11 +16,12 @@ export const strongPasswordBoundarySchema = z
       "Mínimo de 8 caracteres, com letra maiúscula, minúscula, número e caractere especial.",
   });
 
-export const emailBoundarySchema = z
-  .email({ error: "E-mail inválido" })
-  .trim()
-  .toLowerCase()
-  .max(255, { error: "O e-mail deve ter no máximo 255 caracteres" });
+export const emailBoundarySchema = z.preprocess(
+  (value) => (typeof value === "string" ? value.trim().toLowerCase() : value),
+  z
+    .email({ error: "E-mail inválido" })
+    .max(255, { error: "O e-mail deve ter no máximo 255 caracteres" }),
+);
 
 const nameBoundarySchema = z
   .string()
@@ -187,7 +188,11 @@ export function registerAuthBoundaryContract(
         },
       },
       "400": {
-        description: "Falha de validação do payload ou credenciais inválidas.",
+        description: "Falha de validação do payload.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      "401": {
+        description: "Credenciais inválidas.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "429": {
@@ -227,7 +232,11 @@ export function registerAuthBoundaryContract(
         },
       },
       "400": {
-        description: "Falha de validação do payload ou refresh inválido/expirado.",
+        description: "Falha de validação do payload.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      "401": {
+        description: "Refresh token inválido ou expirado.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "429": {
@@ -334,7 +343,11 @@ export function registerAuthBoundaryContract(
         description: "Senha redefinida com sucesso.",
       },
       "400": {
-        description: "Payload inválido ou token inválido.",
+        description: "Falha de validação do payload.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      "401": {
+        description: "Token de recuperação inválido ou expirado.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "429": {

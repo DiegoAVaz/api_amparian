@@ -3,16 +3,18 @@ import { z } from "../docs/zod-openapi";
 import { nullableProfilePhoneSchema } from "./phone.contract";
 import type { SharedBoundaryComponents } from "./shared.contract";
 
-const httpUrlSchema = z
-  .url({ error: "URL inválida" })
-  .trim()
-  .max(512, { error: "A URL deve ter no máximo 512 caracteres" })
-  .refine(
-    (value) => value.startsWith("http://") || value.startsWith("https://"),
-    {
-      error: "A URL deve começar com http:// ou https://",
-    },
-  );
+const httpUrlSchema = z.preprocess(
+  (value) => (typeof value === "string" ? value.trim() : value),
+  z
+    .url({ error: "URL inválida" })
+    .max(512, { error: "A URL deve ter no máximo 512 caracteres" })
+    .refine(
+      (value) => value.startsWith("http://") || value.startsWith("https://"),
+      {
+        error: "A URL deve começar com http:// ou https://",
+      },
+    ),
+);
 
 const unsignedIntegerMax = 4_294_967_295;
 const textColumnMaxLength = 65_535;
@@ -153,9 +155,7 @@ export const meProfilePatchBodySchema = z
     state: profileStateSchema,
     bio: nullableTrimmedString(5000, "bio"),
     publicOrganizationName: nullableTrimmedString(255, "organização pública"),
-    avatarUrl: httpUrlSchema
-      .nullable()
-      .optional(),
+    avatarUrl: nullableOptionalHttpUrlSchema("URL do avatar"),
   })
   .superRefine((value, ctx) => {
     if (Object.keys(value).length > 0) {
@@ -654,6 +654,10 @@ export function registerMeBoundaryContract(
         description: "Inscrição não encontrada.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
+      "422": {
+        description: "Inscrição não pode ser cancelada no estado atual.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
       "500": {
         description: "Erro interno.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
@@ -741,7 +745,7 @@ export function registerMeBoundaryContract(
         content: { "application/json": { schema: organizerEventSchema } },
       },
       "400": {
-        description: "Payload inválido ou regras de negócio não atendidas.",
+        description: "Payload inválido, códigos de catálogo inválidos ou datas inválidas.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "401": {

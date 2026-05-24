@@ -142,8 +142,12 @@ export class ResetPasswordUseCase {
   async execute(token: string, newPassword: string): Promise<void> {
     const token_hash = sha256Hex(token);
     const row = await this.passwordReset.findByHash(token_hash);
-    if (!row || row.used_at) throw new HttpError(401, "INVALID_TOKEN", "Token inválido ou expirado");
-    if (new Date(row.expires_at) < new Date()) throw new HttpError(401, "INVALID_TOKEN", "Token expirado");
+    if (!row || row.used_at) {
+      throw new HttpError(401, "INVALID_RESET_TOKEN", "Token de recuperação inválido ou expirado");
+    }
+    if (new Date(row.expires_at) < new Date()) {
+      throw new HttpError(401, "INVALID_RESET_TOKEN", "Token de recuperação inválido ou expirado");
+    }
 
     const password_hash = await bcrypt.hash(newPassword, 10);
     await this.db.transaction(async (trx) => {
