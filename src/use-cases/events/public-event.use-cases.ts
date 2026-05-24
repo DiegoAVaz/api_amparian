@@ -103,11 +103,11 @@ export class RegisterForEventUseCase {
       regId = await this.events.transaction(async (trx) => {
         const ev = await this.events.findByIdForUpdate(trx, eventId);
         if (!ev || ev.status !== "published")
-          throw new HttpError(404, "NOT_FOUND", "Evento não encontrado");
+          throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
 
         const computed = computeEventStatus(ev);
         if (computed === "ended") {
-          throw new HttpError(400, "EVENT_ENDED", "Evento encerrado");
+          throw new HttpError(422, "EVENT_ENDED", "Evento encerrado");
         }
 
         const existing = await this.registrations.findByEventAndUser(
@@ -129,7 +129,7 @@ export class RegisterForEventUseCase {
           );
           if (used >= Number(ev.capacity)) {
             throw new HttpError(
-              400,
+              422,
               "CAPACITY_FULL",
               "Não há vagas disponíveis",
             );
@@ -138,7 +138,7 @@ export class RegisterForEventUseCase {
 
         if (!body.agreedResponsibility) {
           throw new HttpError(
-            400,
+            422,
             "TERMS_REQUIRED",
             "É necessário aceitar o termo de responsabilidade",
           );
@@ -175,4 +175,3 @@ export class RegisterForEventUseCase {
     };
   }
 }
-

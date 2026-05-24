@@ -43,8 +43,25 @@ export const publicEventIdParamsSchema = z.object({
 });
 
 export const eventRegistrationBodySchema = z.object({
-  participantRole: z.string().optional(),
-  agreedResponsibility: z.boolean(),
+  participantRole: z.preprocess(
+    (value) => {
+      if (value === undefined || typeof value !== "string") {
+        return value;
+      }
+
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : undefined;
+    },
+    z
+      .string()
+      .max(255, {
+        error: "A função do participante deve ter no máximo 255 caracteres",
+      })
+      .optional(),
+  ),
+  agreedResponsibility: z.literal(true, {
+    error: "É necessário aceitar o termo de responsabilidade",
+  }),
 });
 
 export function registerEventsBoundaryContract(
@@ -233,4 +250,3 @@ export function registerEventsBoundaryContract(
     },
   });
 }
-

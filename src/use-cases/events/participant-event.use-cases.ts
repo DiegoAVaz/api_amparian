@@ -1,4 +1,5 @@
 import type { RegistrationRepository } from "../../repositories/registration.repository";
+import { computeEventStatus } from "../../utils/event-helpers";
 import { HttpError } from "../../utils/http-error";
 import { organizerDisplayName } from "../../utils/organizer-name";
 
@@ -30,8 +31,28 @@ export class CancelRegistrationUseCase {
   constructor(private readonly registrations: RegistrationRepository) {}
 
   async execute(userId: number, registrationId: number): Promise<void> {
+    const registration = await this.registrations.findForUserWithEvent(userId, registrationId);
+
+    if (!registration) {
+      throw new HttpError(404, "REGISTRATION_NOT_FOUND", "Inscrição não encontrada");
+    }
+
+    if (registration.status === "cancelled") {
+      throw new HttpError(422, "REGISTRATION_ALREADY_CANCELLED", "Inscrição já cancelada");
+    }
+
+    const eventStatus = computeEventStatus({
+      status: registration.event_status,
+      starts_at: registration.starts_at,
+      ends_at: registration.ends_at,
+    });
+
+    if (eventStatus === "ended") {
+      throw new HttpError(422, "EVENT_ENDED", "Não é possível cancelar inscrição de evento encerrado");
+    }
+
     const n = await this.registrations.cancelForUser(userId, registrationId);
-    if (!n) throw new HttpError(404, "NOT_FOUND", "Inscrição não encontrada");
+    if (!n) throw new HttpError(404, "REGISTRATION_NOT_FOUND", "Inscrição não encontrada");
   }
 }
 

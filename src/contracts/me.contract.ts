@@ -88,24 +88,33 @@ export const meProfilePatchBodySchema = z
   });
 
 export const meRegistrationsQuerySchema = z.object({
-  page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
+  page: z.coerce
+    .number({ error: "A página deve ser um número" })
+    .int({ error: "A página deve ser um número inteiro" })
+    .min(1, { error: "A página deve ser maior ou igual a 1" })
+    .default(1),
+  limit: z.coerce
+    .number({ error: "O limite deve ser um número" })
+    .int({ error: "O limite deve ser um número inteiro" })
+    .min(1, { error: "O limite deve ser maior ou igual a 1" })
+    .max(100, { error: "O limite deve ser menor ou igual a 100" })
+    .default(20),
 });
 
 export const meAgendaQuerySchema = z.object({
   year: z.coerce
-    .number()
-    .int()
-    .min(2000)
-    .max(2100)
+    .number({ error: "O ano deve ser um número" })
+    .int({ error: "O ano deve ser um número inteiro" })
+    .min(2000, { error: "O ano deve ser maior ou igual a 2000" })
+    .max(2100, { error: "O ano deve ser menor ou igual a 2100" })
     .openapi({
       param: { name: "year", in: "query", required: true },
     }),
   month: z.coerce
-    .number()
-    .int()
-    .min(1)
-    .max(12)
+    .number({ error: "O mês deve ser um número" })
+    .int({ error: "O mês deve ser um número inteiro" })
+    .min(1, { error: "O mês deve ser maior ou igual a 1" })
+    .max(12, { error: "O mês deve ser menor ou igual a 12" })
     .openapi({
       param: { name: "month", in: "query", required: true },
     }),
@@ -255,7 +264,10 @@ export const meEventIdParamsSchema = z.object({
 });
 
 export const meRegistrationIdParamsSchema = z.object({
-  registrationId: z.coerce.number().int().positive(),
+  registrationId: z.coerce
+    .number({ error: "O ID da inscrição deve ser um número" })
+    .int({ error: "O ID da inscrição deve ser um número inteiro" })
+    .positive({ error: "O ID da inscrição deve ser maior que 0" }),
 });
 
 export const meEventRegistrationParamsSchema = z.object({

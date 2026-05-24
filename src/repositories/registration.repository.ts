@@ -88,6 +88,35 @@ export class RegistrationRepository {
     return { rows, total };
   }
 
+  async findForUserWithEvent(
+    userId: number,
+    registrationId: number,
+  ): Promise<
+    | {
+        id: number;
+        status: string;
+        event_id: number;
+        event_status: string;
+        starts_at: string | Date;
+        ends_at: string | Date | null;
+      }
+    | undefined
+  > {
+    return this.db("event_registrations as er")
+      .join("events as e", "er.event_id", "e.id")
+      .where("er.id", registrationId)
+      .where("er.user_id", userId)
+      .select(
+        "er.id",
+        "er.status",
+        "er.event_id",
+        "e.status as event_status",
+        "e.starts_at",
+        "e.ends_at",
+      )
+      .first();
+  }
+
   async cancelForUser(userId: number, registrationId: number): Promise<number> {
     return this.db("event_registrations").where({ id: registrationId, user_id: userId }).update({ status: "cancelled" });
   }
@@ -106,8 +135,10 @@ export class RegistrationRepository {
       .join("users as u", "e.organizer_id", "u.id")
       .where("er.user_id", userId)
       .whereIn("er.status", ["pending", "confirmed"])
+      .where("e.status", "published")
       .whereBetween("e.starts_at", [start, end])
-      .select("e.id", "e.title", "e.starts_at", "u.public_organization_name", "u.name as organizer_name");
+      .select("e.id", "e.title", "e.starts_at", "u.public_organization_name", "u.name as organizer_name")
+      .orderBy("e.starts_at", "asc");
   }
 
   async countConfirmedRegistrationsByUser(userId: number): Promise<number> {
