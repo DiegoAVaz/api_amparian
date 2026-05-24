@@ -5,11 +5,16 @@ import type { EventRepository } from "../../repositories/event.repository";
 import type { RegistrationRepository } from "../../repositories/registration.repository";
 
 function isDuplicateRegistrationError(error: unknown): boolean {
-  const err = error as { code?: unknown; errno?: unknown; sqlMessage?: unknown };
+  const err = error as {
+    code?: unknown;
+    errno?: unknown;
+    sqlMessage?: unknown;
+  };
   return (
-    err.code === "ER_DUP_ENTRY"
-    || err.errno === 1062
-    || (typeof err.sqlMessage === "string" && err.sqlMessage.includes("uq_registration_event_user"))
+    err.code === "ER_DUP_ENTRY" ||
+    err.errno === 1062 ||
+    (typeof err.sqlMessage === "string" &&
+      err.sqlMessage.includes("uq_registration_event_user"))
   );
 }
 
@@ -44,7 +49,8 @@ export class GetPublicEventUseCase {
 
   async execute(eventId: number) {
     const row = await this.events.findPublishedByIdWithOrganizer(eventId);
-    if (!row) throw new HttpError(404, "NOT_FOUND", "Evento não encontrado");
+    if (!row)
+      throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
 
     const types = await this.events.findTypesForEvent(eventId);
     const requirements = await this.events.findRequirementsForEvent(eventId);
@@ -66,7 +72,9 @@ export class GetPublicEventUseCase {
       }),
       organizerId: Number(row.organizer_id),
       startsAt: new Date(row.starts_at as string).toISOString(),
-      endsAt: row.ends_at ? new Date(row.ends_at as string).toISOString() : null,
+      endsAt: row.ends_at
+        ? new Date(row.ends_at as string).toISOString()
+        : null,
       locationName: (row.location_name as string | null) ?? null,
       isRemote: Boolean(row.is_remote),
       capacity: row.capacity === null ? null : Number(row.capacity),
@@ -94,38 +102,66 @@ export class RegisterForEventUseCase {
     try {
       regId = await this.events.transaction(async (trx) => {
         const ev = await this.events.findByIdForUpdate(trx, eventId);
-        if (!ev || ev.status !== "published") throw new HttpError(404, "NOT_FOUND", "Evento não encontrado");
+        if (!ev || ev.status !== "published")
+          throw new HttpError(404, "NOT_FOUND", "Evento não encontrado");
 
         const computed = computeEventStatus(ev);
         if (computed === "ended") {
           throw new HttpError(400, "EVENT_ENDED", "Evento encerrado");
         }
 
-        const existing = await this.registrations.findByEventAndUser(eventId, userId, trx);
-        if (existing) throw new HttpError(409, "ALREADY_REGISTERED", "Você já está inscrito neste evento");
+        const existing = await this.registrations.findByEventAndUser(
+          eventId,
+          userId,
+          trx,
+        );
+        if (existing)
+          throw new HttpError(
+            409,
+            "ALREADY_REGISTERED",
+            "Você já está inscrito neste evento",
+          );
 
         if (ev.capacity !== null) {
-          const used = await this.registrations.countActiveByEvent(eventId, trx);
+          const used = await this.registrations.countActiveByEvent(
+            eventId,
+            trx,
+          );
           if (used >= Number(ev.capacity)) {
-            throw new HttpError(400, "CAPACITY_FULL", "Não há vagas disponíveis");
+            throw new HttpError(
+              400,
+              "CAPACITY_FULL",
+              "Não há vagas disponíveis",
+            );
           }
         }
 
         if (!body.agreedResponsibility) {
-          throw new HttpError(400, "TERMS_REQUIRED", "É necessário aceitar o termo de responsabilidade");
+          throw new HttpError(
+            400,
+            "TERMS_REQUIRED",
+            "É necessário aceitar o termo de responsabilidade",
+          );
         }
 
-        return this.registrations.insert({
-          event_id: eventId,
-          user_id: userId,
-          status: "pending",
-          participant_role: body.participantRole ?? null,
-          agreed_responsibility_at: new Date(),
-        }, trx);
+        return this.registrations.insert(
+          {
+            event_id: eventId,
+            user_id: userId,
+            status: "pending",
+            participant_role: body.participantRole ?? null,
+            agreed_responsibility_at: new Date(),
+          },
+          trx,
+        );
       });
     } catch (error) {
       if (isDuplicateRegistrationError(error)) {
-        throw new HttpError(409, "ALREADY_REGISTERED", "Você já está inscrito neste evento");
+        throw new HttpError(
+          409,
+          "ALREADY_REGISTERED",
+          "Você já está inscrito neste evento",
+        );
       }
       throw error;
     }
@@ -139,3 +175,4 @@ export class RegisterForEventUseCase {
     };
   }
 }
+

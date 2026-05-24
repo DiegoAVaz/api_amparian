@@ -3,19 +3,39 @@ import { z } from "../docs/zod-openapi";
 import type { SharedBoundaryComponents } from "./shared.contract";
 
 export const publicEventsListQuerySchema = z.object({
-  q: z
-    .string()
-    .optional()
-    .openapi({
-      param: {
-        name: "q",
-        in: "query",
-        required: false,
-        description: "Filtro textual dos eventos publicados.",
-      },
-    }),
-  page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
+  q: z.preprocess(
+    (value) => {
+      if (value === undefined || typeof value !== "string") {
+        return value;
+      }
+
+      return value.trim();
+    },
+    z
+      .string()
+      .min(2, { error: "A busca deve ter pelo menos 2 caracteres" })
+      .max(100, { error: "A busca deve ter no máximo 100 caracteres" })
+      .optional()
+      .openapi({
+        param: {
+          name: "q",
+          in: "query",
+          required: false,
+          description: "Filtro textual dos eventos publicados.",
+        },
+      }),
+  ),
+  page: z.coerce
+    .number()
+    .int({ error: "A página deve ser um número inteiro" })
+    .min(1, { error: "A página deve ser maior ou igual a 1" })
+    .default(1),
+  limit: z.coerce
+    .number()
+    .int({ error: "O limite deve ser um número inteiro" })
+    .min(1, { error: "O limite deve ser maior ou igual a 1" })
+    .max(100, { error: "O limite deve ser no máximo 100" })
+    .default(20),
 });
 
 export const publicEventIdParamsSchema = z.object({
@@ -23,9 +43,7 @@ export const publicEventIdParamsSchema = z.object({
 });
 
 export const eventRegistrationBodySchema = z.object({
-  participantRole: z
-    .string()
-    .optional(),
+  participantRole: z.string().optional(),
   agreedResponsibility: z.boolean(),
 });
 
@@ -41,9 +59,7 @@ export function registerEventsBoundaryContract(
       summary: z.string(),
       org: z.string(),
       startsAt: z.iso.datetime(),
-      locationName: z
-        .string()
-        .nullable(),
+      locationName: z.string().nullable(),
       isRemote: z.boolean(),
       capacity: z.number().int().nullable(),
       coverImageUrl: z.url().nullable(),
@@ -65,36 +81,27 @@ export function registerEventsBoundaryContract(
       id: z.number().int(),
       title: z.string(),
       summary: z.string(),
-      description: z
-        .string()
-        .nullable(),
-      rulesTerms: z
-        .string()
-        .nullable(),
+      description: z.string().nullable(),
+      rulesTerms: z.string().nullable(),
       org: z.string(),
       organizerId: z.number().int(),
       startsAt: z.iso.datetime(),
       endsAt: z.iso.datetime().nullable(),
-      locationName: z
-        .string()
-        .nullable(),
+      locationName: z.string().nullable(),
       isRemote: z.boolean(),
       capacity: z.number().int().nullable(),
-      highlightSkill: z
-        .string()
-        .nullable(),
+      highlightSkill: z.string().nullable(),
       coverImageUrl: z.url().nullable(),
       types: z.array(shared.lookupOptionSchema),
       requirements: z.array(shared.lookupOptionSchema),
-      computedStatus: z
-        .enum([
-          "draft",
-          "published",
-          "cancelled",
-          "upcoming",
-          "ongoing",
-          "past",
-        ]),
+      computedStatus: z.enum([
+        "draft",
+        "published",
+        "cancelled",
+        "upcoming",
+        "ongoing",
+        "past",
+      ]),
     }),
   );
 
@@ -104,9 +111,7 @@ export function registerEventsBoundaryContract(
       id: z.number().int(),
       eventId: z.number().int(),
       status: z.literal("pending"),
-      participantRole: z
-        .string()
-        .nullable(),
+      participantRole: z.string().nullable(),
       createdAt: z.iso.datetime(),
     }),
   );
@@ -228,3 +233,4 @@ export function registerEventsBoundaryContract(
     },
   });
 }
+
