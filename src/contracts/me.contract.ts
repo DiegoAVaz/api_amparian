@@ -14,6 +14,19 @@ const httpUrlSchema = z
     },
   );
 
+const unsignedIntegerMax = 4_294_967_295;
+const textColumnMaxLength = 65_535;
+
+function requiredTrimmedString(maxLength: number, fieldLabel: string) {
+  return z
+    .string({ error: `O campo ${fieldLabel} deve ser texto` })
+    .trim()
+    .min(1, { error: `O campo ${fieldLabel} é obrigatório` })
+    .max(maxLength, {
+      error: `O campo ${fieldLabel} deve ter no máximo ${maxLength} caracteres`,
+    });
+}
+
 function nullableTrimmedString(
   maxLength: number,
   fieldLabel: string,
@@ -39,6 +52,75 @@ function nullableTrimmedString(
       .nullable()
       .optional(),
   );
+}
+
+function nullableOptionalTrimmedString(maxLength: number, fieldLabel: string) {
+  return z.preprocess(
+    (value) => {
+      if (value === null || value === undefined || typeof value !== "string") {
+        return value;
+      }
+
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    },
+    z
+      .string({ error: `O campo ${fieldLabel} deve ser texto` })
+      .max(maxLength, {
+        error: `O campo ${fieldLabel} deve ter no máximo ${maxLength} caracteres`,
+      })
+      .nullable()
+      .optional(),
+  );
+}
+
+function nullableOptionalHttpUrlSchema(fieldLabel: string) {
+  return z.preprocess(
+    (value) => {
+      if (value === null || value === undefined || typeof value !== "string") {
+        return value;
+      }
+
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    },
+    httpUrlSchema
+      .nullable()
+      .optional()
+      .refine((value) => value === null || value === undefined || value.length <= 512, {
+        error: `O campo ${fieldLabel} deve ter no máximo 512 caracteres`,
+      }),
+  );
+}
+
+function lookupCodeArraySchema(fieldLabel: string, options: { required: boolean }) {
+  const arraySchema = z
+    .array(
+      z
+        .string({ error: `Cada código de ${fieldLabel} deve ser texto` })
+        .trim()
+        .min(1, { error: `Cada código de ${fieldLabel} deve ser informado` })
+        .max(64, { error: `Cada código de ${fieldLabel} deve ter no máximo 64 caracteres` }),
+      { error: `O campo ${fieldLabel} deve ser uma lista` },
+    )
+    .superRefine((value, ctx) => {
+      const seen = new Set<string>();
+      value.forEach((code, index) => {
+        if (seen.has(code)) {
+          ctx.addIssue({
+            code: "custom",
+            message: `Não informe códigos duplicados em ${fieldLabel}`,
+            path: [index],
+          });
+          return;
+        }
+        seen.add(code);
+      });
+    });
+
+  return options.required
+    ? arraySchema.min(1, { error: `Informe ao menos um item em ${fieldLabel}` })
+    : arraySchema;
 }
 
 const profileStateSchema = z.preprocess(
@@ -122,8 +204,21 @@ export const meAgendaQuerySchema = z.object({
 
 export const meEventsFilterQuerySchema = z.object({
   filter: z
-    .enum(["upcoming", "past", "ongoing"])
-    .optional()
+    .preprocess(
+      (value) => {
+        if (value === null || value === undefined || typeof value !== "string") {
+          return value;
+        }
+
+        const trimmed = value.trim();
+        return trimmed.length > 0 ? trimmed : undefined;
+      },
+      z
+        .enum(["upcoming", "past", "ongoing"], {
+          error: "O filtro deve ser upcoming, past ou ongoing",
+        })
+        .optional(),
+    )
     .openapi({
       param: { name: "filter", in: "query", required: false },
     }),
@@ -131,44 +226,35 @@ export const meEventsFilterQuerySchema = z.object({
 
 export const createEventBodySchema = z
   .object({
-    title: z.string().min(1),
-    summary: z
-      .string()
-      .min(1),
-    description: z
-      .string()
+    title: requiredTrimmedString(255, "título"),
+    summary: requiredTrimmedString(textColumnMaxLength, "resumo"),
+    description: nullableOptionalTrimmedString(textColumnMaxLength, "descrição"),
+    rulesTerms: nullableOptionalTrimmedString(textColumnMaxLength, "termos e regras"),
+    startsAt: z.iso.datetime({
+      error: "A data de início deve estar em formato ISO 8601",
+    }),
+    endsAt: z.iso
+      .datetime({
+        error: "A data de término deve estar em formato ISO 8601",
+      })
       .nullable()
       .optional(),
-    rulesTerms: z
-      .string()
-      .nullable()
-      .optional(),
-    startsAt: z.iso.datetime(),
-    endsAt: z.iso.datetime().nullable().optional(),
-    locationName: z
-      .string()
-      .nullable()
-      .optional(),
-    isRemote: z.boolean(),
+    locationName: nullableOptionalTrimmedString(255, "local"),
+    isRemote: z.boolean({ error: "Informe se o evento é remoto" }),
     capacity: z
-      .number()
-      .int()
-      .positive()
+      .number({ error: "A capacidade deve ser um número" })
+      .int({ error: "A capacidade deve ser um número inteiro" })
+      .min(1, { error: "A capacidade deve ser maior que 0" })
+      .max(unsignedIntegerMax, {
+        error: `A capacidade deve ser menor ou igual a ${unsignedIntegerMax}`,
+      })
       .nullable()
       .optional(),
-    highlightSkill: z
-      .string()
-      .nullable()
-      .optional(),
-    typeCodes: z
-      .array(z.string())
-      .min(1),
-    requirementCodes: z
-      .array(z.string()),
-    publish: z.boolean(),
-    coverImageUrl: httpUrlSchema
-      .nullable()
-      .optional(),
+    highlightSkill: nullableOptionalTrimmedString(255, "habilidade em destaque"),
+    typeCodes: lookupCodeArraySchema("tipos de evento", { required: true }),
+    requirementCodes: lookupCodeArraySchema("requisitos", { required: false }),
+    publish: z.boolean({ error: "Informe se o evento deve ser publicado" }),
+    coverImageUrl: nullableOptionalHttpUrlSchema("URL da imagem de capa"),
   })
   .superRefine((value, ctx) => {
     if (!value.endsAt) return;
@@ -177,7 +263,7 @@ export const createEventBodySchema = z
     if (endsAt <= startsAt) {
       ctx.addIssue({
         code: "custom",
-        message: "endsAt deve ser maior que startsAt",
+        message: "A data de término deve ser maior que a data de início",
         path: ["endsAt"],
       });
     }
@@ -185,58 +271,50 @@ export const createEventBodySchema = z
 
 export const patchEventBodySchema = z
   .object({
-    title: z
-      .string()
-      .min(1)
-      .optional(),
-    summary: z
-      .string()
-      .min(1)
-      .optional(),
-    description: z
-      .string()
-      .nullable()
-      .optional(),
-    rulesTerms: z
-      .string()
-      .nullable()
-      .optional(),
+    title: requiredTrimmedString(255, "título").optional(),
+    summary: requiredTrimmedString(textColumnMaxLength, "resumo").optional(),
+    description: nullableOptionalTrimmedString(textColumnMaxLength, "descrição"),
+    rulesTerms: nullableOptionalTrimmedString(textColumnMaxLength, "termos e regras"),
     startsAt: z
       .iso
-      .datetime()
+      .datetime({
+        error: "A data de início deve estar em formato ISO 8601",
+      })
       .optional(),
     endsAt: z
       .iso
-      .datetime()
+      .datetime({
+        error: "A data de término deve estar em formato ISO 8601",
+      })
       .nullable()
       .optional(),
-    locationName: z
-      .string()
-      .nullable()
-      .optional(),
-    isRemote: z.boolean().optional(),
+    locationName: nullableOptionalTrimmedString(255, "local"),
+    isRemote: z.boolean({ error: "Informe se o evento é remoto" }).optional(),
     capacity: z
-      .number()
-      .int()
-      .positive()
+      .number({ error: "A capacidade deve ser um número" })
+      .int({ error: "A capacidade deve ser um número inteiro" })
+      .min(1, { error: "A capacidade deve ser maior que 0" })
+      .max(unsignedIntegerMax, {
+        error: `A capacidade deve ser menor ou igual a ${unsignedIntegerMax}`,
+      })
       .nullable()
       .optional(),
-    highlightSkill: z
-      .string()
-      .nullable()
-      .optional(),
-    coverImageUrl: httpUrlSchema
-      .nullable()
-      .optional(),
-    typeCodes: z
-      .array(z.string())
-      .optional(),
-    requirementCodes: z
-      .array(z.string())
-      .optional(),
-    publish: z.boolean().optional(),
+    highlightSkill: nullableOptionalTrimmedString(255, "habilidade em destaque"),
+    coverImageUrl: nullableOptionalHttpUrlSchema("URL da imagem de capa"),
+    typeCodes: lookupCodeArraySchema("tipos de evento", { required: true }).optional(),
+    requirementCodes: lookupCodeArraySchema("requisitos", { required: false }).optional(),
+    publish: z.boolean({ error: "Informe se o evento deve ser publicado" }).optional(),
   })
   .superRefine((value, ctx) => {
+    if (Object.keys(value).length === 0) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Informe ao menos um campo para atualizar",
+        path: [],
+      });
+      return;
+    }
+
     if (
       value.startsAt === undefined ||
       value.endsAt === undefined ||
@@ -248,7 +326,7 @@ export const patchEventBodySchema = z
     if (endsAt <= startsAt) {
       ctx.addIssue({
         code: "custom",
-        message: "endsAt deve ser maior que startsAt",
+        message: "A data de término deve ser maior que a data de início",
         path: ["endsAt"],
       });
     }
@@ -256,11 +334,16 @@ export const patchEventBodySchema = z
 
 export const updateOrganizerRegistrationBodySchema = z.object({
   status: z
-    .enum(["pending", "confirmed", "cancelled"]),
+    .enum(["pending", "confirmed", "cancelled"], {
+      error: "O status deve ser pending, confirmed ou cancelled",
+    }),
 });
 
 export const meEventIdParamsSchema = z.object({
-  eventId: z.coerce.number().int().positive(),
+  eventId: z.coerce
+    .number({ error: "O ID do evento deve ser um número" })
+    .int({ error: "O ID do evento deve ser um número inteiro" })
+    .positive({ error: "O ID do evento deve ser maior que 0" }),
 });
 
 export const meRegistrationIdParamsSchema = z.object({
@@ -271,8 +354,14 @@ export const meRegistrationIdParamsSchema = z.object({
 });
 
 export const meEventRegistrationParamsSchema = z.object({
-  eventId: z.coerce.number().int().positive(),
-  registrationId: z.coerce.number().int().positive(),
+  eventId: z.coerce
+    .number({ error: "O ID do evento deve ser um número" })
+    .int({ error: "O ID do evento deve ser um número inteiro" })
+    .positive({ error: "O ID do evento deve ser maior que 0" }),
+  registrationId: z.coerce
+    .number({ error: "O ID da inscrição deve ser um número" })
+    .int({ error: "O ID da inscrição deve ser um número inteiro" })
+    .positive({ error: "O ID da inscrição deve ser maior que 0" }),
 });
 
 export function registerMeBoundaryContract(
@@ -742,6 +831,10 @@ export function registerMeBoundaryContract(
         description: "Evento ou inscrição não encontrados.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
+      "422": {
+        description: "Status da inscrição não pode ser alterado no estado atual.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
       "500": {
         description: "Erro interno.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
@@ -775,6 +868,10 @@ export function registerMeBoundaryContract(
       },
       "404": {
         description: "Evento não encontrado.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      "422": {
+        description: "Evento não pode ser publicado no estado atual.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "500": {
@@ -887,6 +984,10 @@ export function registerMeBoundaryContract(
       },
       "404": {
         description: "Evento não encontrado.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      "422": {
+        description: "Evento não pode ser removido no estado atual.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "500": {

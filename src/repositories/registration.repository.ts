@@ -21,6 +21,13 @@ export class RegistrationRepository {
     return firstCount(countRows);
   }
 
+  async countByEvent(eventId: number, db: Knex = this.db): Promise<number> {
+    const countRows = await db("event_registrations")
+      .where({ event_id: eventId })
+      .count("* as count");
+    return firstCount(countRows);
+  }
+
   async insert(input: {
     event_id: number;
     user_id: number;
@@ -48,6 +55,8 @@ export class RegistrationRepository {
     return this.db("event_registrations as er")
       .join("users as u", "er.user_id", "u.id")
       .where("er.event_id", eventId)
+      .orderBy("er.created_at", "asc")
+      .orderBy("er.id", "asc")
       .select(
         "er.id",
         "er.status",
@@ -61,8 +70,26 @@ export class RegistrationRepository {
       );
   }
 
-  async updateStatus(eventId: number, registrationId: number, status: RegistrationStatus): Promise<number> {
-    return this.db("event_registrations").where({ id: registrationId, event_id: eventId }).update({ status });
+  async findByEventAndIdForUpdate(
+    eventId: number,
+    registrationId: number,
+    trx: Knex,
+  ): Promise<EventRegistrationRecord | undefined> {
+    return trx<EventRegistrationRecord>("event_registrations")
+      .where({ id: registrationId, event_id: eventId })
+      .forUpdate()
+      .first();
+  }
+
+  async updateStatus(
+    eventId: number,
+    registrationId: number,
+    status: RegistrationStatus,
+    db: Knex = this.db,
+  ): Promise<number> {
+    return db("event_registrations")
+      .where({ id: registrationId, event_id: eventId })
+      .update({ status });
   }
 
   async listForUserPaginated(userId: number, page: number, limit: number) {
