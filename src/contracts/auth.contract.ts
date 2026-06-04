@@ -3,14 +3,17 @@ import { z } from "../docs/zod-openapi";
 import { optionalRegisterPhoneSchema } from "./phone.contract";
 import type { SharedBoundaryComponents } from "./shared.contract";
 
+const strongPasswordMessageError =
+  "A senha deve conter pelo menos 8 caracteres, incluindo letras maiúsculas, minúsculas, números e caracteres especiais.";
+
 export const strongPasswordBoundarySchema = z
   .string()
-  .min(8, { error: "A senha deve ter pelo menos 8 caracteres" })
+  .min(8, { error: strongPasswordMessageError })
   .max(72, { error: "A senha deve ter no máximo 72 caracteres" })
-  .regex(/[A-Z]/, { error: "A senha deve ter ao menos 1 letra maiúscula" })
-  .regex(/[a-z]/, { error: "A senha deve ter ao menos 1 letra minúscula" })
-  .regex(/\d/, { error: "A senha deve ter ao menos 1 número" })
-  .regex(/[^\w\s]/, { error: "A senha deve ter ao menos 1 caractere especial" })
+  .regex(/[A-Z]/, { error: strongPasswordMessageError })
+  .regex(/[a-z]/, { error: strongPasswordMessageError })
+  .regex(/\d/, { error: strongPasswordMessageError })
+  .regex(/[^\w\s]/, { error: strongPasswordMessageError })
   .openapi({
     description:
       "Mínimo de 8 caracteres, com letra maiúscula, minúscula, número e caractere especial.",
@@ -361,3 +364,4 @@ export function registerAuthBoundaryContract(
     },
   });
 }
+

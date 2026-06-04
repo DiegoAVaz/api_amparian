@@ -14,7 +14,7 @@ export const publicEventsListQuerySchema = z.object({
     },
     z
       .string()
-      .min(2, { error: "A busca deve ter pelo menos 2 caracteres" })
+      .min(1, { error: "A busca deve ter pelo menos 1 caractere" })
       .max(100, { error: "A busca deve ter no máximo 100 caracteres" })
       .optional()
       .openapi({
@@ -258,3 +258,4 @@ export function registerEventsBoundaryContract(
     },
   });
 }
+
