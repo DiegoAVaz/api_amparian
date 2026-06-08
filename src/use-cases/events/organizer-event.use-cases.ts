@@ -9,6 +9,25 @@ import {
 } from "../../utils/event-helpers";
 import { HttpError } from "../../utils/http-error";
 
+function ensureValidEventDates(
+  startsAt: Date,
+  endsAt: Date | null,
+): void {
+  if (Number.isNaN(startsAt.getTime())) {
+    throw new HttpError(400, "INVALID_DATE_RANGE", "Data de início inválida");
+  }
+  if (endsAt && Number.isNaN(endsAt.getTime())) {
+    throw new HttpError(400, "INVALID_DATE_RANGE", "Data de término inválida");
+  }
+  if (endsAt && endsAt.getTime() <= startsAt.getTime()) {
+    throw new HttpError(400, "INVALID_DATE_RANGE", "A data de término deve ser maior que a data de início");
+  }
+}
+
+function isBlank(value: unknown): boolean {
+  return typeof value !== "string" || value.trim().length === 0;
+}
+
 export class ListMyEventsUseCase {
   constructor(private readonly events: EventRepository) {}
 
@@ -47,7 +66,7 @@ export class GetOrganizerEventUseCase {
 
   async execute(userId: number, eventId: number) {
     const row = await this.events.findByOrganizerAndId(userId, eventId);
-    if (!row) throw new HttpError(404, "NOT_FOUND", "Evento não encontrado");
+    if (!row) throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
     const types = await this.events.findTypesForEvent(eventId);
     const requirements = await this.events.findRequirementsForEvent(eventId);
     const computed = computeEventStatus({
@@ -91,15 +110,30 @@ export class CreateEventUseCase {
     },
   ) {
     const status: EventStatus = body.publish ? "published" : "draft";
+    const startsAt = new Date(body.startsAt);
+    const endsAt = body.endsAt ? new Date(body.endsAt) : null;
+    ensureValidEventDates(startsAt, endsAt);
 
     const typeIds = await this.lookups.findEventTypeIdsByCodes(body.typeCodes);
     if (typeIds.length !== body.typeCodes.length) {
-      throw new HttpError(400, "INVALID_TYPES", "Um ou mais tipos de evento são inválidos");
+      const validCodes = new Set(typeIds.map((type) => type.code));
+      const invalidCodes = body.typeCodes.filter((code) => !validCodes.has(code));
+      throw new HttpError(
+        400,
+        "INVALID_EVENT_TYPES",
+        `Tipos de evento inválidos: ${invalidCodes.join(", ")}`,
+      );
     }
 
     const reqIds = await this.lookups.findRequirementIdsByCodes(body.requirementCodes);
     if (reqIds.length !== body.requirementCodes.length) {
-      throw new HttpError(400, "INVALID_REQUIREMENTS", "Um ou mais requisitos são inválidos");
+      const validCodes = new Set(reqIds.map((requirement) => requirement.code));
+      const invalidCodes = body.requirementCodes.filter((code) => !validCodes.has(code));
+      throw new HttpError(
+        400,
+        "INVALID_REQUIREMENTS",
+        `Requisitos inválidos: ${invalidCodes.join(", ")}`,
+      );
     }
 
     const eventId = await this.events.transaction(async (trx) => {
@@ -109,8 +143,8 @@ export class CreateEventUseCase {
         summary: body.summary,
         description: body.description ?? null,
         rules_terms: body.rulesTerms ?? null,
-        starts_at: new Date(body.startsAt),
-        ends_at: body.endsAt ? new Date(body.endsAt) : null,
+        starts_at: startsAt,
+        ends_at: endsAt,
         location_name: body.locationName ?? null,
         is_remote: body.isRemote,
         capacity: body.capacity ?? null,
@@ -160,7 +194,12 @@ export class UpdateEventUseCase {
     }>,
   ) {
     const existing = await this.events.findByOrganizerAndId(userId, eventId);
-    if (!existing) throw new HttpError(404, "NOT_FOUND", "Evento não encontrado");
+    if (!existing) throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
+    const nextStartsAt = patch.startsAt !== undefined ? new Date(patch.startsAt) : new Date(existing.starts_at);
+    const nextEndsAt = patch.endsAt !== undefined
+      ? (patch.endsAt ? new Date(patch.endsAt) : null)
+      : (existing.ends_at ? new Date(existing.ends_at) : null);
+    ensureValidEventDates(nextStartsAt, nextEndsAt);
 
     await this.events.transaction(async (trx) => {
       const row: Record<string, unknown> = {};
@@ -180,9 +219,15 @@ export class UpdateEventUseCase {
       await this.events.updateEvent(trx, eventId, row);
 
       if (patch.typeCodes !== undefined) {
-        const typeIds = await trx("event_types").whereIn("code", patch.typeCodes).select("id");
+        const typeIds = await trx("event_types").whereIn("code", patch.typeCodes).select("id", "code");
         if (typeIds.length !== patch.typeCodes.length) {
-          throw new HttpError(400, "INVALID_TYPES", "Um ou mais tipos de evento são inválidos");
+          const validCodes = new Set(typeIds.map((type) => type.code));
+          const invalidCodes = patch.typeCodes.filter((code) => !validCodes.has(code));
+          throw new HttpError(
+            400,
+            "INVALID_EVENT_TYPES",
+            `Tipos de evento inválidos: ${invalidCodes.join(", ")}`,
+          );
         }
         await this.events.replaceEventTypes(
           trx,
@@ -192,9 +237,15 @@ export class UpdateEventUseCase {
       }
 
       if (patch.requirementCodes !== undefined) {
-        const reqIds = await trx("requirement_options").whereIn("code", patch.requirementCodes).select("id");
+        const reqIds = await trx("requirement_options").whereIn("code", patch.requirementCodes).select("id", "code");
         if (reqIds.length !== patch.requirementCodes.length) {
-          throw new HttpError(400, "INVALID_REQUIREMENTS", "Um ou mais requisitos são inválidos");
+          const validCodes = new Set(reqIds.map((requirement) => requirement.code));
+          const invalidCodes = patch.requirementCodes.filter((code) => !validCodes.has(code));
+          throw new HttpError(
+            400,
+            "INVALID_REQUIREMENTS",
+            `Requisitos inválidos: ${invalidCodes.join(", ")}`,
+          );
         }
         await this.events.replaceEventRequirements(
           trx,
@@ -209,11 +260,53 @@ export class UpdateEventUseCase {
 }
 
 export class DeleteEventUseCase {
-  constructor(private readonly events: EventRepository) {}
+  constructor(
+    private readonly events: EventRepository,
+    private readonly registrations: RegistrationRepository,
+  ) {}
 
   async execute(userId: number, eventId: number): Promise<void> {
+    const event = await this.events.findByOrganizerAndId(userId, eventId);
+    if (!event) throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
+
+    if (event.status === "cancelled") {
+      throw new HttpError(422, "EVENT_ALREADY_CANCELLED", "Evento já cancelado");
+    }
+
+    const startsAt = new Date(event.starts_at);
+    const endsAt = event.ends_at ? new Date(event.ends_at) : null;
+    if (
+      Number.isNaN(startsAt.getTime()) ||
+      (endsAt !== null && Number.isNaN(endsAt.getTime())) ||
+      (endsAt !== null && endsAt.getTime() <= startsAt.getTime())
+    ) {
+      throw new HttpError(422, "INVALID_EVENT_DATES", "Corrija as datas do evento antes de remover");
+    }
+
+    const now = new Date();
+    if ((endsAt !== null && endsAt < now) || (endsAt === null && startsAt < now)) {
+      throw new HttpError(422, "EVENT_ENDED", "Não é possível remover evento encerrado");
+    }
+
+    const computed = computeEventStatus({
+      status: event.status,
+      starts_at: event.starts_at,
+      ends_at: event.ends_at,
+    });
+
+    if (computed === "ended") {
+      throw new HttpError(422, "EVENT_ENDED", "Não é possível remover evento encerrado");
+    }
+
+    const totalRegistrations = await this.registrations.countByEvent(eventId);
+    if (event.status === "published" || totalRegistrations > 0) {
+      const n = await this.events.setStatus(userId, eventId, "cancelled");
+      if (!n) throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
+      return;
+    }
+
     const n = await this.events.deleteByOrganizer(userId, eventId);
-    if (!n) throw new HttpError(404, "NOT_FOUND", "Evento não encontrado");
+    if (!n) throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
   }
 }
 
@@ -221,8 +314,70 @@ export class PublishEventUseCase {
   constructor(private readonly events: EventRepository) {}
 
   async execute(userId: number, eventId: number) {
+    const event = await this.events.findByOrganizerAndId(userId, eventId);
+    if (!event) throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
+
+    if (event.status === "cancelled") {
+      throw new HttpError(422, "EVENT_CANCELLED", "Não é possível publicar evento cancelado");
+    }
+
+    if (event.status === "published") {
+      throw new HttpError(422, "EVENT_ALREADY_PUBLISHED", "Evento já publicado");
+    }
+
+    const startsAt = new Date(event.starts_at);
+    const endsAt = event.ends_at ? new Date(event.ends_at) : null;
+
+    if (
+      Number.isNaN(startsAt.getTime()) ||
+      (endsAt !== null && Number.isNaN(endsAt.getTime())) ||
+      (endsAt !== null && endsAt.getTime() <= startsAt.getTime())
+    ) {
+      throw new HttpError(422, "INVALID_EVENT_DATES", "Corrija as datas do evento antes de publicar");
+    }
+
+    const now = new Date();
+    if ((endsAt !== null && endsAt < now) || (endsAt === null && startsAt < now)) {
+      throw new HttpError(422, "EVENT_ENDED", "Não é possível publicar evento encerrado");
+    }
+
+    const computed = computeEventStatus({
+      status: event.status,
+      starts_at: event.starts_at,
+      ends_at: event.ends_at,
+    });
+
+    if (computed === "ended") {
+      throw new HttpError(422, "EVENT_ENDED", "Não é possível publicar evento encerrado");
+    }
+
+    if (isBlank(event.title) || isBlank(event.summary)) {
+      throw new HttpError(
+        422,
+        "EVENT_MISSING_REQUIRED_FIELDS",
+        "Preencha título e resumo antes de publicar",
+      );
+    }
+
+    if (!Boolean(event.is_remote) && isBlank(event.location_name)) {
+      throw new HttpError(
+        422,
+        "EVENT_LOCATION_REQUIRED",
+        "Informe o local do evento presencial antes de publicar",
+      );
+    }
+
+    const types = await this.events.findTypesForEvent(eventId);
+    if (types.length === 0) {
+      throw new HttpError(
+        422,
+        "EVENT_TYPE_REQUIRED",
+        "Informe ao menos um tipo de evento antes de publicar",
+      );
+    }
+
     const n = await this.events.setStatus(userId, eventId, "published");
-    if (!n) throw new HttpError(404, "NOT_FOUND", "Evento não encontrado");
+    if (!n) throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
     return new GetOrganizerEventUseCase(this.events).execute(userId, eventId);
   }
 }
@@ -235,7 +390,7 @@ export class ListOrganizerRegistrationsUseCase {
 
   async execute(organizerId: number, eventId: number) {
     const ev = await this.events.findByOrganizerAndId(organizerId, eventId);
-    if (!ev) throw new HttpError(404, "NOT_FOUND", "Evento não encontrado");
+    if (!ev) throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
 
     const rows = await this.registrations.listForOrganizerEvent(eventId);
 
@@ -243,16 +398,19 @@ export class ListOrganizerRegistrationsUseCase {
       const city = (r.city as string | null) ?? "";
       const state = (r.state as string | null) ?? "";
       const cityUf = city && state ? `${city} / ${state}` : city || state || "";
+      const status = r.status === "confirmed" || r.status === "pending" || r.status === "cancelled"
+        ? r.status
+        : "pending";
+
       return {
-        id: String(r.id),
-        name: r.name as string,
+        id: String(Number(r.id)),
+        name: String(r.name),
         role: (r.participant_role as string | null) ?? "",
-        email: r.email as string,
+        email: String(r.email),
         phone: (r.phone as string | null) ?? "",
         cityUf,
         registrationDate: new Date(r.created_at as string).toISOString(),
-        status:
-          r.status === "confirmed" ? "confirmed" : r.status === "pending" ? "pending" : "cancelled",
+        status,
       };
     });
 
@@ -272,11 +430,55 @@ export class UpdateRegistrationStatusUseCase {
     registrationId: number,
     status: "pending" | "confirmed" | "cancelled",
   ) {
-    const ev = await this.events.findByOrganizerAndId(organizerId, eventId);
-    if (!ev) throw new HttpError(404, "NOT_FOUND", "Evento não encontrado");
+    await this.events.transaction(async (trx) => {
+      const ev = await this.events.findByIdForUpdate(trx, eventId);
+      if (!ev || Number(ev.organizer_id) !== organizerId) {
+        throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
+      }
 
-    const n = await this.registrations.updateStatus(eventId, registrationId, status);
-    if (!n) throw new HttpError(404, "NOT_FOUND", "Inscrição não encontrada");
+      if (ev.status === "cancelled") {
+        throw new HttpError(422, "EVENT_CANCELLED", "Não é possível alterar inscrição de evento cancelado");
+      }
+
+      const startsAt = new Date(ev.starts_at);
+      const endsAt = ev.ends_at ? new Date(ev.ends_at) : null;
+      if (
+        Number.isNaN(startsAt.getTime()) ||
+        (endsAt !== null && Number.isNaN(endsAt.getTime())) ||
+        (endsAt !== null && endsAt.getTime() <= startsAt.getTime())
+      ) {
+        throw new HttpError(422, "INVALID_EVENT_DATES", "Corrija as datas do evento antes de alterar inscrições");
+      }
+
+      const now = new Date();
+      if ((endsAt !== null && endsAt < now) || (endsAt === null && startsAt < now)) {
+        throw new HttpError(422, "EVENT_ENDED", "Não é possível alterar inscrição de evento encerrado");
+      }
+
+      const registration = await this.registrations.findByEventAndIdForUpdate(eventId, registrationId, trx);
+      if (!registration) {
+        throw new HttpError(404, "REGISTRATION_NOT_FOUND", "Inscrição não encontrada");
+      }
+
+      if (registration.status === status) {
+        throw new HttpError(422, "REGISTRATION_STATUS_UNCHANGED", "Inscrição já está com este status");
+      }
+
+      if (registration.status === "cancelled") {
+        throw new HttpError(422, "REGISTRATION_ALREADY_CANCELLED", "Não é possível reativar inscrição cancelada");
+      }
+
+      if (status === "confirmed" && ev.capacity !== null) {
+        const activeRegistrations = await this.registrations.countActiveByEvent(eventId, trx);
+        if (activeRegistrations > Number(ev.capacity)) {
+          throw new HttpError(422, "CAPACITY_FULL", "A capacidade do evento já foi ultrapassada");
+        }
+      }
+
+      const n = await this.registrations.updateStatus(eventId, registrationId, status, trx);
+      if (!n) throw new HttpError(404, "REGISTRATION_NOT_FOUND", "Inscrição não encontrada");
+    });
+
     return { id: registrationId, status };
   }
 }

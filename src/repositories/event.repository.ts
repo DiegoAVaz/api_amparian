@@ -95,6 +95,10 @@ export class EventRepository {
     return this.db<EventRecord>("events").where({ id: eventId }).first();
   }
 
+  async findByIdForUpdate(trx: Knex, eventId: number): Promise<EventRecord | undefined> {
+    return trx<EventRecord>("events").where({ id: eventId }).forUpdate().first();
+  }
+
   async findByOrganizerAndId(organizerId: number, eventId: number): Promise<EventRecord | undefined> {
     return this.db<EventRecord>("events").where({ id: eventId, organizer_id: organizerId }).first();
   }

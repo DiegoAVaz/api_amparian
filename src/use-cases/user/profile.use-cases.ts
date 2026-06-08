@@ -4,12 +4,16 @@ import type { RegistrationRepository } from "../../repositories/registration.rep
 import type { UserRepository } from "../../repositories/user.repository";
 import { HttpError } from "../../utils/http-error";
 
+function userNotFoundError(): HttpError {
+  return new HttpError(404, "USER_NOT_FOUND", "Usuário não encontrado");
+}
+
 export class GetProfileUseCase {
   constructor(private readonly users: UserRepository) {}
 
   async execute(userId: number) {
     const user = await this.users.findById(userId);
-    if (!user) throw new HttpError(404, "NOT_FOUND", "Usuário não encontrado");
+    if (!user) throw userNotFoundError();
     return toUserPublicDto(user);
   }
 }
@@ -40,13 +44,13 @@ export class UpdateProfileUseCase {
 
     if (Object.keys(row).length === 0) {
       const user = await this.users.findById(userId);
-      if (!user) throw new HttpError(404, "NOT_FOUND", "Usuário não encontrado");
+      if (!user) throw userNotFoundError();
       return toUserPublicDto(user);
     }
 
     await this.users.updateProfile(userId, row);
     const user = await this.users.findById(userId);
-    if (!user) throw new HttpError(404, "NOT_FOUND", "Usuário não encontrado");
+    if (!user) throw userNotFoundError();
     return toUserPublicDto(user);
   }
 }
@@ -60,7 +64,7 @@ export class GetProfileStatsUseCase {
 
   async execute(userId: number) {
     const user = await this.users.findById(userId);
-    if (!user) throw new HttpError(404, "NOT_FOUND", "Usuário não encontrado");
+    if (!user) throw userNotFoundError();
 
     const eventsCreated = await this.events.countByOrganizer(userId);
     const eventsAttended = await this.registrations.countConfirmedRegistrationsByUser(userId);
