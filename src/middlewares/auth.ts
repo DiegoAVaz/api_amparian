@@ -8,6 +8,7 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction): v
     next(new HttpError(401, "UNAUTHORIZED", "Autenticação necessária"));
     return;
   }
+
   const token = header.slice(7);
   try {
     const payload = verifyAccessToken(token);

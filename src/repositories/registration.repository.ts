@@ -5,14 +5,25 @@ import { firstCount } from "../utils/knex-helpers";
 export class RegistrationRepository {
   constructor(private readonly db: Knex) {}
 
-  async findByEventAndUser(eventId: number, userId: number): Promise<EventRegistrationRecord | undefined> {
-    return this.db<EventRegistrationRecord>("event_registrations").where({ event_id: eventId, user_id: userId }).first();
+  async findByEventAndUser(
+    eventId: number,
+    userId: number,
+    db: Knex = this.db,
+  ): Promise<EventRegistrationRecord | undefined> {
+    return db<EventRegistrationRecord>("event_registrations").where({ event_id: eventId, user_id: userId }).first();
   }
 
-  async countActiveByEvent(eventId: number): Promise<number> {
-    const countRows = await this.db("event_registrations")
+  async countActiveByEvent(eventId: number, db: Knex = this.db): Promise<number> {
+    const countRows = await db("event_registrations")
       .where({ event_id: eventId })
       .whereIn("status", ["pending", "confirmed"])
+      .count("* as count");
+    return firstCount(countRows);
+  }
+
+  async countByEvent(eventId: number, db: Knex = this.db): Promise<number> {
+    const countRows = await db("event_registrations")
+      .where({ event_id: eventId })
       .count("* as count");
     return firstCount(countRows);
   }
@@ -23,8 +34,8 @@ export class RegistrationRepository {
     status: RegistrationStatus;
     participant_role: string | null;
     agreed_responsibility_at: Date | null;
-  }): Promise<number> {
-    const insertResult = await this.db("event_registrations").insert(input);
+  }, db: Knex = this.db): Promise<number> {
+    const insertResult = await db("event_registrations").insert(input);
     return Number(Array.isArray(insertResult) ? insertResult[0] : insertResult);
   }
 
@@ -44,6 +55,8 @@ export class RegistrationRepository {
     return this.db("event_registrations as er")
       .join("users as u", "er.user_id", "u.id")
       .where("er.event_id", eventId)
+      .orderBy("er.created_at", "asc")
+      .orderBy("er.id", "asc")
       .select(
         "er.id",
         "er.status",
@@ -57,8 +70,26 @@ export class RegistrationRepository {
       );
   }
 
-  async updateStatus(eventId: number, registrationId: number, status: RegistrationStatus): Promise<number> {
-    return this.db("event_registrations").where({ id: registrationId, event_id: eventId }).update({ status });
+  async findByEventAndIdForUpdate(
+    eventId: number,
+    registrationId: number,
+    trx: Knex,
+  ): Promise<EventRegistrationRecord | undefined> {
+    return trx<EventRegistrationRecord>("event_registrations")
+      .where({ id: registrationId, event_id: eventId })
+      .forUpdate()
+      .first();
+  }
+
+  async updateStatus(
+    eventId: number,
+    registrationId: number,
+    status: RegistrationStatus,
+    db: Knex = this.db,
+  ): Promise<number> {
+    return db("event_registrations")
+      .where({ id: registrationId, event_id: eventId })
+      .update({ status });
   }
 
   async listForUserPaginated(userId: number, page: number, limit: number) {
@@ -78,10 +109,39 @@ export class RegistrationRepository {
       )
       .orderBy("e.starts_at", "desc");
 
-    const countRows = await q.clone().clearOrder().count("* as count");
+    const countRows = await q.clone().clearSelect().clearOrder().count("* as count");
     const total = firstCount(countRows);
     const rows = await q.limit(limit).offset(offset);
     return { rows, total };
+  }
+
+  async findForUserWithEvent(
+    userId: number,
+    registrationId: number,
+  ): Promise<
+    | {
+        id: number;
+        status: string;
+        event_id: number;
+        event_status: string;
+        starts_at: string | Date;
+        ends_at: string | Date | null;
+      }
+    | undefined
+  > {
+    return this.db("event_registrations as er")
+      .join("events as e", "er.event_id", "e.id")
+      .where("er.id", registrationId)
+      .where("er.user_id", userId)
+      .select(
+        "er.id",
+        "er.status",
+        "er.event_id",
+        "e.status as event_status",
+        "e.starts_at",
+        "e.ends_at",
+      )
+      .first();
   }
 
   async cancelForUser(userId: number, registrationId: number): Promise<number> {
@@ -102,8 +162,10 @@ export class RegistrationRepository {
       .join("users as u", "e.organizer_id", "u.id")
       .where("er.user_id", userId)
       .whereIn("er.status", ["pending", "confirmed"])
+      .where("e.status", "published")
       .whereBetween("e.starts_at", [start, end])
-      .select("e.id", "e.title", "e.starts_at", "u.public_organization_name", "u.name as organizer_name");
+      .select("e.id", "e.title", "e.starts_at", "u.public_organization_name", "u.name as organizer_name")
+      .orderBy("e.starts_at", "asc");
   }
 
   async countConfirmedRegistrationsByUser(userId: number): Promise<number> {

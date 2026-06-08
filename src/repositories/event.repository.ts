@@ -31,7 +31,7 @@ export class EventRepository {
       });
     }
 
-    const countRows = await q.clone().clearOrder().count("* as count");
+    const countRows = await q.clone().clearSelect().clearOrder().count("* as count");
     const total = firstCount(countRows);
     const rows = await q.limit(params.limit).offset(offset);
     return { rows, total };
@@ -93,6 +93,10 @@ export class EventRepository {
 
   async findById(eventId: number): Promise<EventRecord | undefined> {
     return this.db<EventRecord>("events").where({ id: eventId }).first();
+  }
+
+  async findByIdForUpdate(trx: Knex, eventId: number): Promise<EventRecord | undefined> {
+    return trx<EventRecord>("events").where({ id: eventId }).forUpdate().first();
   }
 
   async findByOrganizerAndId(organizerId: number, eventId: number): Promise<EventRecord | undefined> {

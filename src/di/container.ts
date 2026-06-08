@@ -69,7 +69,7 @@ function buildContainer() {
     getOrganizerEvent: new GetOrganizerEventUseCase(eventRepo),
     createEvent: new CreateEventUseCase(eventRepo, lookupRepo),
     updateEvent: new UpdateEventUseCase(eventRepo),
-    deleteEvent: new DeleteEventUseCase(eventRepo),
+    deleteEvent: new DeleteEventUseCase(eventRepo, registrationRepo),
     publishEvent: new PublishEventUseCase(eventRepo),
     listOrganizerRegistrations: new ListOrganizerRegistrationsUseCase(eventRepo, registrationRepo),
     updateRegistrationStatus: new UpdateRegistrationStatusUseCase(eventRepo, registrationRepo),

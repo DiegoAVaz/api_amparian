@@ -9,6 +9,15 @@ import { HttpError } from "../../utils/http-error";
 import { signAccessToken } from "../../utils/jwt";
 import { accessExpiresInSeconds, AuthTokensHelper, refreshTtlMs } from "./auth-tokens.helper";
 
+function isDuplicateEmailError(error: unknown): boolean {
+  const err = error as { code?: unknown; errno?: unknown; sqlMessage?: unknown };
+  return (
+    err.code === "ER_DUP_ENTRY"
+    || err.errno === 1062
+    || (typeof err.sqlMessage === "string" && err.sqlMessage.includes("users.email"))
+  );
+}
+
 export class RegisterUserUseCase {
   constructor(
     private readonly users: UserRepository,
@@ -20,12 +29,20 @@ export class RegisterUserUseCase {
       throw new HttpError(409, "EMAIL_EXISTS", "E-mail já cadastrado");
     }
     const password_hash = await bcrypt.hash(input.password, 10);
-    const userId = await this.users.insertUser({
-      email: input.email,
-      password_hash,
-      name: input.name,
-      phone: input.phone ?? null,
-    });
+    let userId: number;
+    try {
+      userId = await this.users.insertUser({
+        email: input.email,
+        password_hash,
+        name: input.name,
+        phone: input.phone ?? null,
+      });
+    } catch (error) {
+      if (isDuplicateEmailError(error)) {
+        throw new HttpError(409, "EMAIL_EXISTS", "E-mail já cadastrado");
+      }
+      throw error;
+    }
     const pair = await this.tokens.createPair(userId);
     const user = await this.users.findById(userId);
     if (!user) throw new HttpError(500, "INTERNAL", "Falha ao criar usuário");
@@ -125,13 +142,21 @@ export class ResetPasswordUseCase {
   async execute(token: string, newPassword: string): Promise<void> {
     const token_hash = sha256Hex(token);
     const row = await this.passwordReset.findByHash(token_hash);
-    if (!row || row.used_at) throw new HttpError(400, "INVALID_TOKEN", "Token inválido ou expirado");
-    if (new Date(row.expires_at) < new Date()) throw new HttpError(400, "INVALID_TOKEN", "Token expirado");
+    if (!row || row.used_at) {
+      throw new HttpError(401, "INVALID_RESET_TOKEN", "Token de recuperação inválido ou expirado");
+    }
+    if (new Date(row.expires_at) < new Date()) {
+      throw new HttpError(401, "INVALID_RESET_TOKEN", "Token de recuperação inválido ou expirado");
+    }
 
     const password_hash = await bcrypt.hash(newPassword, 10);
     await this.db.transaction(async (trx) => {
       await trx("users").where({ id: row.user_id }).update({ password_hash });
       await trx("password_reset_tokens").where({ id: row.id }).update({ used_at: trx.fn.now() });
+      await trx("refresh_tokens")
+        .where({ user_id: row.user_id })
+        .whereNull("revoked_at")
+        .update({ revoked_at: trx.fn.now() });
     });
   }
 }
