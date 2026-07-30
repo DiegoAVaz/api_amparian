@@ -1,3 +1,4 @@
+import { getEnv } from "../config/env";
 import { db } from "../db/knex";
 import { EventRepository } from "../repositories/event.repository";
 import { LookupRepository } from "../repositories/lookup.repository";
@@ -5,6 +6,7 @@ import { PasswordResetRepository } from "../repositories/password-reset.reposito
 import { RefreshTokenRepository } from "../repositories/refresh-token.repository";
 import { RegistrationRepository } from "../repositories/registration.repository";
 import { UserRepository } from "../repositories/user.repository";
+import { createMailer } from "../services/mail";
 import { ListLookupsUseCase } from "../use-cases/lookup/lookup.use-cases";
 import {
   ForgotPasswordUseCase,
@@ -14,7 +16,13 @@ import {
   RegisterUserUseCase,
   ResetPasswordUseCase,
 } from "../use-cases/auth/auth.use-cases";
-import { AuthTokensHelper } from "../use-cases/auth/auth-tokens.helper";
+import {
+  accessExpiresInSeconds,
+  AuthTokensHelper,
+  passwordResetTtlMs,
+  refreshTtlMs,
+} from "../use-cases/auth/auth-tokens.helper";
+import { signAccessToken } from "../utils/jwt";
 import {
   CreateEventUseCase,
   DeleteEventUseCase,
@@ -35,7 +43,11 @@ import {
   ListPublicEventsUseCase,
   RegisterForEventUseCase,
 } from "../use-cases/events/public-event.use-cases";
-import { GetProfileStatsUseCase, GetProfileUseCase, UpdateProfileUseCase } from "../use-cases/user/profile.use-cases";
+import {
+  GetProfileStatsUseCase,
+  GetProfileUseCase,
+  UpdateProfileUseCase,
+} from "../use-cases/user/profile.use-cases";
 
 function buildContainer() {
   const userRepo = new UserRepository(db);
@@ -45,21 +57,37 @@ function buildContainer() {
   const eventRepo = new EventRepository(db);
   const registrationRepo = new RegistrationRepository(db);
 
-  const authTokens = new AuthTokensHelper(refreshTokenRepo);
+  const authTokens = new AuthTokensHelper(refreshTokenRepo, signAccessToken, {
+    refreshTtlMs: refreshTtlMs(),
+    accessTtlSeconds: accessExpiresInSeconds(),
+  });
+  const mailer = createMailer();
 
   return {
     registerUser: new RegisterUserUseCase(userRepo, authTokens),
     loginUser: new LoginUserUseCase(userRepo, authTokens),
-    refreshSession: new RefreshSessionUseCase(refreshTokenRepo),
+    refreshSession: new RefreshSessionUseCase(refreshTokenRepo, authTokens),
     logoutUser: new LogoutUserUseCase(refreshTokenRepo),
-    forgotPassword: new ForgotPasswordUseCase(userRepo, passwordResetRepo),
+    forgotPassword: new ForgotPasswordUseCase(
+      userRepo,
+      passwordResetRepo,
+      mailer,
+      {
+        webUrl: getEnv().APP_WEB_URL,
+        tokenTtlMs: passwordResetTtlMs(),
+      },
+    ),
     resetPassword: new ResetPasswordUseCase(passwordResetRepo, db),
 
     listLookups: new ListLookupsUseCase(lookupRepo),
 
     getProfile: new GetProfileUseCase(userRepo),
     updateProfile: new UpdateProfileUseCase(userRepo),
-    getProfileStats: new GetProfileStatsUseCase(userRepo, eventRepo, registrationRepo),
+    getProfileStats: new GetProfileStatsUseCase(
+      userRepo,
+      eventRepo,
+      registrationRepo,
+    ),
 
     listPublicEvents: new ListPublicEventsUseCase(eventRepo),
     getPublicEvent: new GetPublicEventUseCase(eventRepo),
@@ -71,8 +99,14 @@ function buildContainer() {
     updateEvent: new UpdateEventUseCase(eventRepo),
     deleteEvent: new DeleteEventUseCase(eventRepo, registrationRepo),
     publishEvent: new PublishEventUseCase(eventRepo),
-    listOrganizerRegistrations: new ListOrganizerRegistrationsUseCase(eventRepo, registrationRepo),
-    updateRegistrationStatus: new UpdateRegistrationStatusUseCase(eventRepo, registrationRepo),
+    listOrganizerRegistrations: new ListOrganizerRegistrationsUseCase(
+      eventRepo,
+      registrationRepo,
+    ),
+    updateRegistrationStatus: new UpdateRegistrationStatusUseCase(
+      eventRepo,
+      registrationRepo,
+    ),
 
     listMyRegistrations: new ListMyRegistrationsUseCase(registrationRepo),
     cancelRegistration: new CancelRegistrationUseCase(registrationRepo),
@@ -88,3 +122,4 @@ export function getContainer(): AppContainer {
   if (!cached) cached = buildContainer();
   return cached;
 }
+

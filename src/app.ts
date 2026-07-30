@@ -1,7 +1,7 @@
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
-import { env } from "./config/env";
+import { getEnv } from "./config/env";
 import { openApiDocument } from "./docs/openapi";
 import { errorHandler } from "./middlewares/error-handler";
 import { apiV1Router } from "./routes";
@@ -94,6 +94,7 @@ function guardDisallowedApiOrigin(
 
 export function createApp() {
   const app = express();
+  const env = getEnv();
   const isProduction = env.NODE_ENV === "production";
 
   const allowedOrigins = (env.CORS_ORIGIN ?? "")
@@ -104,7 +105,7 @@ export function createApp() {
   const allowlistedOrigins =
     allowedOrigins.length > 0
       ? allowedOrigins
-      : env.NODE_ENV === "production"
+      : isProduction
         ? []
         : [devDefaultOrigin];
   const apiCorsOptions = createApiCorsOptions(allowlistedOrigins);
@@ -137,3 +138,4 @@ export function createApp() {
 
   return app;
 }
+

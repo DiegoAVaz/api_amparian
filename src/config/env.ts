@@ -1,7 +1,39 @@
 import dotenv from "dotenv";
+import ms from "ms";
 import { z } from "zod";
 
 dotenv.config();
+
+const DEFAULT_MAIL_FROM = "Amparian <no-reply@amparian.local>";
+
+const PASSWORD_RESET_MIN_MS = 5 * 60 * 1000;
+const PASSWORD_RESET_MAX_MS = 24 * 60 * 60 * 1000;
+
+function parseDurationMs(value: string): number | null {
+  let parsed: number | undefined;
+  try {
+    // `ms` lança, em vez de retornar undefined, para string vazia.
+    parsed = (ms as (expr: string) => number | undefined)(value);
+  } catch {
+    return null;
+  }
+  return typeof parsed === "number" && Number.isFinite(parsed) ? parsed : null;
+}
+
+const passwordResetDurationSchema = z.string().refine(
+  (value) => {
+    const parsed = parseDurationMs(value);
+    return (
+      parsed !== null &&
+      parsed >= PASSWORD_RESET_MIN_MS &&
+      parsed <= PASSWORD_RESET_MAX_MS
+    );
+  },
+  {
+    error:
+      'PASSWORD_RESET_EXPIRES_IN deve ser uma duração entre "5m" e "24h", como "1h" ou "30m"',
+  },
+);
 
 const schema = z
   .object({
@@ -37,22 +69,116 @@ const schema = z
     JWT_REFRESH_SECRET: z.string().min(16),
     JWT_ACCESS_EXPIRES_IN: z.string().default("15m"),
     JWT_REFRESH_EXPIRES_IN: z.string().default("7d"),
+    APP_WEB_URL: z
+      .url({
+        protocol: /^https?$/,
+        error: "APP_WEB_URL deve ser uma URL http ou https válida",
+      })
+      // A barra final duplicaria a barra do path ao montar o link do e-mail.
+      .transform((url) => url.replace(/\/+$/, ""))
+      .default("http://localhost:3000"),
+    // `prefault` em vez de `default`: valida também o valor padrão, para um
+    // erro de digitação aqui não passar despercebido.
+    PASSWORD_RESET_EXPIRES_IN: passwordResetDurationSchema.prefault("1h"),
+    MAIL_DRIVER: z.enum(["console", "smtp"]).default("console"),
+    MAIL_HOST: z.string().optional(),
+    MAIL_PORT: z.coerce.number().int().positive().max(65535).default(587),
+    MAIL_USER: z.string().optional(),
+    MAIL_PASSWORD: z.string().optional(),
+    MAIL_FROM: z.string().default(DEFAULT_MAIL_FROM),
   })
   .superRefine((value, ctx) => {
-    if (value.NODE_ENV !== "production") return;
+    if (value.NODE_ENV === "development") return;
 
     if (
       !value.CORS_ORIGIN?.split(",").some((origin) => origin.trim().length > 0)
     ) {
       ctx.addIssue({
         code: "custom",
-        message: "CORS_ORIGIN é obrigatório em produção",
+        message:
+          "CORS_ORIGIN é obrigatório fora do ambiente de desenvolvimento",
         path: ["CORS_ORIGIN"],
+      });
+    }
+
+    // É a base do link de recuperação: o token viaja na query string, então
+    // http em claro o expõe em log de proxy, cache e histórico do navegador.
+    if (!value.APP_WEB_URL.startsWith("https://")) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "APP_WEB_URL precisa usar https fora do ambiente de desenvolvimento — é a base do link de recuperação de senha",
+        path: ["APP_WEB_URL"],
+      });
+    }
+
+    if (value.MAIL_DRIVER !== "smtp") {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          'MAIL_DRIVER deve ser "smtp" fora do ambiente de desenvolvimento',
+        path: ["MAIL_DRIVER"],
+      });
+    }
+
+    for (const field of [
+      "MAIL_HOST",
+      "MAIL_USER",
+      "MAIL_PASSWORD",
+      "MAIL_FROM",
+    ] as const) {
+      if (!value[field]?.trim()) {
+        ctx.addIssue({
+          code: "custom",
+          message: `${field} é obrigatório fora do ambiente de desenvolvimento`,
+          path: [field],
+        });
+      }
+    }
+
+    if (value.MAIL_FROM === DEFAULT_MAIL_FROM) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "MAIL_FROM é obrigatório fora do ambiente de desenvolvimento e precisa ser um remetente verificado no provedor SMTP",
+        path: ["MAIL_FROM"],
       });
     }
   });
 
 export type Env = z.infer<typeof schema>;
 
-export const env: Env = schema.parse(process.env);
+let cached: Env | null = null;
 
+/**
+ * Configuração validada, em singleton preguiçoso.
+ *
+ * É uma função, e não uma constante exportada, de propósito. Validar no
+ * import obrigaria todo módulo que importasse `env` — direta ou
+ * transitivamente — a ter ambiente válido só para ser carregado, inclusive um
+ * teste de unidade que não lê configuração nenhuma. Sendo função, o parse só
+ * acontece quando alguém realmente precisa do valor, uma única vez.
+ *
+ * O efeito colateral desejado é que cada `getEnv()` no código marca, à vista,
+ * um módulo que depende de configuração ambiente.
+ *
+ * Memorizado pelo tempo de vida do processo, sem hook de reset: um teste que
+ * precise de configuração diferente deve recebê-la por injeção, como
+ * `PasswordResetConfig`, e não mutar `process.env`.
+ */
+export function getEnv(): Env {
+  if (!cached) {
+    const parsed = schema.safeParse(process.env);
+    if (!parsed.success) {
+      const detalhes = parsed.error.issues
+        .map(
+          (issue) =>
+            `  - ${issue.path.join(".") || "(raiz)"}: ${issue.message}`,
+        )
+        .join("\n");
+      throw new Error(`Configuração de ambiente inválida:\n${detalhes}`);
+    }
+    cached = parsed.data;
+  }
+  return cached;
+}
