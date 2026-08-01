@@ -12,8 +12,18 @@ export const db: Knex = knex({
     password: process.env.DB_PASSWORD ?? "",
     database: process.env.DB_NAME ?? "amparian",
     charset: "utf8mb4",
-    dateStrings: true,
     timezone: "Z",
   },
-  pool: { min: 0, max: 10 },
+  pool: {
+    min: 0,
+    max: 10,
+    afterCreate: (
+      conn: { query: (sql: string, cb: (err?: unknown) => void) => void },
+      done: (err: unknown, conn: unknown) => void,
+    ) => {
+      conn.query("SET time_zone = '+00:00'", (err?: unknown) =>
+        done(err, conn),
+      );
+    },
+  },
 });
