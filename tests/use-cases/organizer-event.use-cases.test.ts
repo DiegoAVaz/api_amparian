@@ -12,6 +12,19 @@ import {
 } from "../../src/use-cases/events/organizer-event.use-cases";
 import { assertHttpError, futureIso, pastIso, fakePublicUrl } from "../helpers";
 
+/** Storage falso: só `delete` importa nestes testes, e ele registra as chaves. */
+function fakeStorage(deleted: string[] = []) {
+  return {
+    put: async () => {
+      throw new Error("não deveria ser chamado");
+    },
+    delete: async (key: string) => {
+      deleted.push(key);
+    },
+    publicUrl: (key: string) => `https://cdn.teste/${key}`,
+  } as never;
+}
+
 function event(overrides: Record<string, unknown> = {}) {
   return {
     id: 1,
@@ -360,7 +373,7 @@ test("delete removes draft events without registrations", async () => {
     countByEvent: async () => 0,
   };
 
-  await new DeleteEventUseCase(events as never, registrations as never).execute(7, 1);
+  await new DeleteEventUseCase(events as never, registrations as never, fakeStorage()).execute(7, 1);
 
   assert.equal(deleted, true);
   assert.equal(cancelled, false);
@@ -384,7 +397,7 @@ test("delete cancels published events instead of deleting", async () => {
     countByEvent: async () => 0,
   };
 
-  await new DeleteEventUseCase(events as never, registrations as never).execute(7, 1);
+  await new DeleteEventUseCase(events as never, registrations as never, fakeStorage()).execute(7, 1);
 
   assert.equal(deleted, false);
   assert.equal(cancelledStatus, "cancelled");
@@ -399,7 +412,7 @@ test("delete returns 422 for ended events", async () => {
   };
 
   await assertHttpError(
-    () => new DeleteEventUseCase(events as never, registrations as never).execute(7, 1),
+    () => new DeleteEventUseCase(events as never, registrations as never, fakeStorage()).execute(7, 1),
     { status: 422, code: "EVENT_ENDED" },
   );
 });

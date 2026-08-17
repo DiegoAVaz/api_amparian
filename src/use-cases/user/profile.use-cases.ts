@@ -1,5 +1,10 @@
 import { toUserPublicDto } from "../../models/user.model";
-import type { PublicUrlResolver } from "../../services/storage";
+import {
+  buildAvatarKey,
+  deleteBlobIfOurs,
+  validateImage,
+} from "../../services/storage";
+import type { PublicUrlResolver, Storage } from "../../services/storage";
 import type { EventRepository } from "../../repositories/event.repository";
 import type { RegistrationRepository } from "../../repositories/registration.repository";
 import type { UserRepository } from "../../repositories/user.repository";
@@ -37,7 +42,6 @@ export class UpdateProfileUseCase {
       state: string | null;
       bio: string | null;
       publicOrganizationName: string | null;
-      avatarUrl: string | null;
     }>,
   ) {
     const row: Record<string, unknown> = {};
@@ -46,8 +50,8 @@ export class UpdateProfileUseCase {
     if (patch.city !== undefined) row.city = patch.city;
     if (patch.state !== undefined) row.state = patch.state;
     if (patch.bio !== undefined) row.bio = patch.bio;
-    if (patch.publicOrganizationName !== undefined) row.public_organization_name = patch.publicOrganizationName;
-    if (patch.avatarUrl !== undefined) row.avatar_url = patch.avatarUrl;
+    if (patch.publicOrganizationName !== undefined)
+      row.public_organization_name = patch.publicOrganizationName;
 
     if (Object.keys(row).length === 0) {
       const user = await this.users.findById(userId);
@@ -74,8 +78,10 @@ export class GetProfileStatsUseCase {
     if (!user) throw userNotFoundError();
 
     const eventsCreated = await this.events.countByOrganizer(userId);
-    const eventsAttended = await this.registrations.countConfirmedRegistrationsByUser(userId);
-    const causesSupported = await this.registrations.countDistinctCausesSupported(userId);
+    const eventsAttended =
+      await this.registrations.countConfirmedRegistrationsByUser(userId);
+    const causesSupported =
+      await this.registrations.countDistinctCausesSupported(userId);
 
     return {
       hoursDonated: 0,
@@ -83,5 +89,68 @@ export class GetProfileStatsUseCase {
       eventsAttended,
       eventsCreated,
     };
+  }
+}
+
+export class UploadAvatarUseCase {
+  constructor(
+    private readonly users: UserRepository,
+    private readonly storage: Storage,
+    private readonly resolvePublicUrl: PublicUrlResolver,
+    private readonly maxBytes: number,
+  ) {}
+
+  async execute(userId: number, buffer: Buffer) {
+    const image = validateImage(buffer, this.maxBytes);
+
+    const before = await this.users.findById(userId);
+    if (!before) throw userNotFoundError();
+
+    const key = buildAvatarKey(userId, image);
+    await this.storage.put(key, image);
+
+    let changed: number;
+    try {
+      changed = await this.users.setAvatar(userId, key);
+    } catch (error) {
+      await deleteBlobIfOurs(this.storage, key);
+      throw error;
+    }
+
+    if (!changed) {
+      await deleteBlobIfOurs(this.storage, key);
+      throw userNotFoundError();
+    }
+
+    await deleteBlobIfOurs(this.storage, before.avatar_url);
+
+    const user = await this.users.findById(userId);
+    if (!user) throw userNotFoundError();
+    return toUserPublicDto(user, this.resolvePublicUrl);
+  }
+}
+
+export class DeleteAvatarUseCase {
+  constructor(
+    private readonly users: UserRepository,
+    private readonly storage: Storage,
+    private readonly resolvePublicUrl: PublicUrlResolver,
+  ) {}
+
+  async execute(userId: number) {
+    const before = await this.users.findById(userId);
+    if (!before) throw userNotFoundError();
+
+    const changed = await this.users.setAvatar(userId, null);
+    if (!changed) {
+      await deleteBlobIfOurs(this.storage, before.avatar_url);
+      throw userNotFoundError();
+    }
+
+    await deleteBlobIfOurs(this.storage, before.avatar_url);
+
+    const user = await this.users.findById(userId);
+    if (!user) throw userNotFoundError();
+    return toUserPublicDto(user, this.resolvePublicUrl);
   }
 }

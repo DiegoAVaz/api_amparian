@@ -107,4 +107,3 @@ export const uploadImage: RequestHandler = (req, res, next) => {
   if (!cached) cached = createUploadImage(getEnv().UPLOAD_MAX_BYTES);
   cached(req, res, next);
 };
-

@@ -66,7 +66,7 @@ test("update profile maps public fields to persisted columns", async () => {
         state: "SP",
         bio: "Bio",
         public_organization_name: "ONG Nova",
-        avatar_url: "https://example.com/avatar.png",
+        avatar_url: "users/9/avatar-abc.png",
       }),
   };
 
@@ -77,7 +77,6 @@ test("update profile maps public fields to persisted columns", async () => {
     state: "SP",
     bio: "Bio",
     publicOrganizationName: "ONG Nova",
-    avatarUrl: "https://example.com/avatar.png",
   });
 
   assert.deepEqual(updates, [
@@ -90,12 +89,13 @@ test("update profile maps public fields to persisted columns", async () => {
         state: "SP",
         bio: "Bio",
         public_organization_name: "ONG Nova",
-        avatar_url: "https://example.com/avatar.png",
       },
     },
   ]);
   assert.equal(result.publicOrganizationName, "ONG Nova");
-  assert.equal(result.avatarUrl, "https://example.com/avatar.png");
+  // O avatar não é mais gravável por aqui — saiu do contrato no api-3 — mas
+  // continua sendo RESOLVIDO na resposta, a partir da chave já guardada.
+  assert.equal(result.avatarUrl, "https://cdn.teste/users/9/avatar-abc.png");
 });
 
 test("update profile with empty patch returns current user without update", async () => {

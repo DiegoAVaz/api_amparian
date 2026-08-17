@@ -6,6 +6,13 @@ export type { Storage, StoredObject } from "./storage";
 export { AzureBlobStorage } from "./azure.storage";
 export type { AzureBlobStorageConfig } from "./azure.storage";
 export { createPublicUrlResolver, storageKeyOf } from "./public-url";
+export { deleteBlobIfOurs } from "./cleanup";
+export {
+  buildAvatarKey,
+  buildEventCoverKey,
+  validateImage,
+} from "./image-validation";
+export type { DetectedImage, ValidatedImage } from "./image-validation";
 export type { PublicUrlResolver } from "./public-url";
 
 let cached: Storage | null = null;

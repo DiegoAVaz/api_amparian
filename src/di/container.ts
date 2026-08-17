@@ -26,6 +26,7 @@ import {
 import { signAccessToken } from "../utils/jwt";
 import {
   CreateEventUseCase,
+  DeleteEventCoverUseCase,
   DeleteEventUseCase,
   GetOrganizerEventUseCase,
   ListMyEventsUseCase,
@@ -33,6 +34,7 @@ import {
   PublishEventUseCase,
   UpdateEventUseCase,
   UpdateRegistrationStatusUseCase,
+  UploadEventCoverUseCase,
 } from "../use-cases/events/organizer-event.use-cases";
 import {
   CancelRegistrationUseCase,
@@ -45,9 +47,11 @@ import {
   RegisterForEventUseCase,
 } from "../use-cases/events/public-event.use-cases";
 import {
+  DeleteAvatarUseCase,
   GetProfileStatsUseCase,
   GetProfileUseCase,
   UpdateProfileUseCase,
+  UploadAvatarUseCase,
 } from "../use-cases/user/profile.use-cases";
 
 function buildContainer() {
@@ -64,7 +68,9 @@ function buildContainer() {
   });
   const mailer = createMailer();
 
-  const resolvePublicUrl = createPublicUrlResolver(createStorage());
+  const storage = createStorage();
+  const resolvePublicUrl = createPublicUrlResolver(storage);
+  const uploadMaxBytes = getEnv().UPLOAD_MAX_BYTES;
 
   return {
     registerUser: new RegisterUserUseCase(
@@ -90,6 +96,13 @@ function buildContainer() {
 
     getProfile: new GetProfileUseCase(userRepo, resolvePublicUrl),
     updateProfile: new UpdateProfileUseCase(userRepo, resolvePublicUrl),
+    uploadAvatar: new UploadAvatarUseCase(
+      userRepo,
+      storage,
+      resolvePublicUrl,
+      uploadMaxBytes,
+    ),
+    deleteAvatar: new DeleteAvatarUseCase(userRepo, storage, resolvePublicUrl),
     getProfileStats: new GetProfileStatsUseCase(
       userRepo,
       eventRepo,
@@ -111,8 +124,19 @@ function buildContainer() {
       resolvePublicUrl,
     ),
     updateEvent: new UpdateEventUseCase(eventRepo, resolvePublicUrl),
-    deleteEvent: new DeleteEventUseCase(eventRepo, registrationRepo),
+    deleteEvent: new DeleteEventUseCase(eventRepo, registrationRepo, storage),
     publishEvent: new PublishEventUseCase(eventRepo, resolvePublicUrl),
+    uploadEventCover: new UploadEventCoverUseCase(
+      eventRepo,
+      storage,
+      resolvePublicUrl,
+      uploadMaxBytes,
+    ),
+    deleteEventCover: new DeleteEventCoverUseCase(
+      eventRepo,
+      storage,
+      resolvePublicUrl,
+    ),
     listOrganizerRegistrations: new ListOrganizerRegistrationsUseCase(
       eventRepo,
       registrationRepo,

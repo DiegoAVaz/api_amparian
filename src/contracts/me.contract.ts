@@ -3,19 +3,6 @@ import { z } from "../docs/zod-openapi";
 import { nullableProfilePhoneSchema } from "./phone.contract";
 import type { SharedBoundaryComponents } from "./shared.contract";
 
-const httpUrlSchema = z.preprocess(
-  (value) => (typeof value === "string" ? value.trim() : value),
-  z
-    .url({ error: "URL inválida" })
-    .max(512, { error: "A URL deve ter no máximo 512 caracteres" })
-    .refine(
-      (value) => value.startsWith("http://") || value.startsWith("https://"),
-      {
-        error: "A URL deve começar com http:// ou https://",
-      },
-    ),
-);
-
 const unsignedIntegerMax = 4_294_967_295;
 const textColumnMaxLength = 65_535;
 
@@ -73,28 +60,6 @@ function nullableOptionalTrimmedString(maxLength: number, fieldLabel: string) {
       })
       .nullable()
       .optional(),
-  );
-}
-
-function nullableOptionalHttpUrlSchema(fieldLabel: string) {
-  return z.preprocess(
-    (value) => {
-      if (value === null || value === undefined || typeof value !== "string") {
-        return value;
-      }
-
-      const trimmed = value.trim();
-      return trimmed.length > 0 ? trimmed : null;
-    },
-    httpUrlSchema
-      .nullable()
-      .optional()
-      .refine(
-        (value) => value === null || value === undefined || value.length <= 512,
-        {
-          error: `O campo ${fieldLabel} deve ter no máximo 512 caracteres`,
-        },
-      ),
   );
 }
 
@@ -163,7 +128,6 @@ export const meProfilePatchBodySchema = z
     state: profileStateSchema,
     bio: nullableTrimmedString(5000, "bio"),
     publicOrganizationName: nullableTrimmedString(255, "organização pública"),
-    avatarUrl: nullableOptionalHttpUrlSchema("URL do avatar"),
   })
   .superRefine((value, ctx) => {
     if (Object.keys(value).length > 0) {
@@ -275,7 +239,6 @@ export const createEventBodySchema = z
     typeCodes: lookupCodeArraySchema("tipos de evento", { required: true }),
     requirementCodes: lookupCodeArraySchema("requisitos", { required: false }),
     publish: z.boolean({ error: "Informe se o evento deve ser publicado" }),
-    coverImageUrl: nullableOptionalHttpUrlSchema("URL da imagem de capa"),
   })
   .superRefine((value, ctx) => {
     if (!value.endsAt) return;
@@ -328,7 +291,6 @@ export const patchEventBodySchema = z
       255,
       "habilidade em destaque",
     ),
-    coverImageUrl: nullableOptionalHttpUrlSchema("URL da imagem de capa"),
     typeCodes: lookupCodeArraySchema("tipos de evento", {
       required: true,
     }).optional(),
@@ -542,6 +504,154 @@ export function registerMeBoundaryContract(
       },
       "404": {
         description: "Usuário não encontrado.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      "500": {
+        description: "Erro interno.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+    },
+  });
+
+  const uploadRequestBody = {
+    required: true,
+    content: {
+      "multipart/form-data": {
+        schema: z.object({
+          file: z
+            .string()
+            .openapi({ type: "string", format: "binary" })
+            .describe("Imagem JPEG, PNG ou WebP"),
+        }),
+      },
+    },
+  };
+
+  const uploadErrorResponses = {
+    "400": {
+      description:
+        "Arquivo ausente, corpo multipart malformado, campo inesperado, campos além do arquivo ou, nas rotas com parâmetro, um id de rota inválido.",
+      content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+    },
+    "401": {
+      description: "Autenticação necessária.",
+      content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+    },
+    "413": {
+      description: "Imagem acima do tamanho máximo permitido.",
+      content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+    },
+    "415": {
+      description:
+        "Os bytes enviados não são de uma imagem JPEG, PNG ou WebP. A extensão e o Content-Type declarados são ignorados.",
+      content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+    },
+    "429": {
+      description: "Muitos envios de imagem em sequência.",
+      content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+    },
+    "500": {
+      description: "Erro interno.",
+      content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+    },
+  };
+
+  registry.registerPath({
+    method: "post",
+    path: "/me/avatar",
+    tags: ["me"],
+    summary: "Envia a foto de perfil do usuário autenticado.",
+    description:
+      "Substitui a foto atual. A imagem anterior é removida do armazenamento.",
+    security: [shared.bearerAuthSecurity],
+    request: { body: uploadRequestBody },
+    responses: {
+      "200": {
+        description: "Perfil atualizado com a nova foto.",
+        content: { "application/json": { schema: shared.userSchema } },
+      },
+      "404": {
+        description:
+          "Usuário do token não existe mais — acontece com um token ainda dentro da validade após o banco ser recriado.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      ...uploadErrorResponses,
+    },
+  });
+
+  registry.registerPath({
+    method: "delete",
+    path: "/me/avatar",
+    tags: ["me"],
+    summary: "Remove a foto de perfil do usuário autenticado.",
+    security: [shared.bearerAuthSecurity],
+    responses: {
+      "200": {
+        description: "Perfil atualizado sem foto.",
+        content: { "application/json": { schema: shared.userSchema } },
+      },
+      "401": {
+        description: "Autenticação necessária.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      "404": {
+        description: "Usuário não encontrado.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      "500": {
+        description: "Erro interno.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+    },
+  });
+
+  registry.registerPath({
+    method: "post",
+    path: "/me/events/{eventId}/cover",
+    tags: ["me"],
+    summary: "Envia a imagem de capa de um evento do organizador autenticado.",
+    description:
+      "Substitui a capa atual. A imagem anterior é removida do armazenamento. Responde 404 tanto para evento inexistente quanto para evento de outro organizador.",
+    security: [shared.bearerAuthSecurity],
+    request: {
+      params: z.object({ eventId: shared.eventIdParam }),
+      body: uploadRequestBody,
+    },
+    responses: {
+      "200": {
+        description: "Evento atualizado com a nova capa.",
+        content: { "application/json": { schema: organizerEventSchema } },
+      },
+      "404": {
+        description: "Evento não encontrado ou de outro organizador.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      ...uploadErrorResponses,
+    },
+  });
+
+  registry.registerPath({
+    method: "delete",
+    path: "/me/events/{eventId}/cover",
+    tags: ["me"],
+    summary: "Remove a imagem de capa de um evento do organizador autenticado.",
+    security: [shared.bearerAuthSecurity],
+    request: { params: z.object({ eventId: shared.eventIdParam }) },
+    responses: {
+      "200": {
+        description: "Evento atualizado sem capa.",
+        content: { "application/json": { schema: organizerEventSchema } },
+      },
+      "400": {
+        description: "Id de rota inválido.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      "401": {
+        description: "Autenticação necessária.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      "404": {
+        description: "Evento não encontrado ou de outro organizador.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "500": {
