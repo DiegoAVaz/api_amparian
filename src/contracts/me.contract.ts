@@ -89,20 +89,28 @@ function nullableOptionalHttpUrlSchema(fieldLabel: string) {
     httpUrlSchema
       .nullable()
       .optional()
-      .refine((value) => value === null || value === undefined || value.length <= 512, {
-        error: `O campo ${fieldLabel} deve ter no máximo 512 caracteres`,
-      }),
+      .refine(
+        (value) => value === null || value === undefined || value.length <= 512,
+        {
+          error: `O campo ${fieldLabel} deve ter no máximo 512 caracteres`,
+        },
+      ),
   );
 }
 
-function lookupCodeArraySchema(fieldLabel: string, options: { required: boolean }) {
+function lookupCodeArraySchema(
+  fieldLabel: string,
+  options: { required: boolean },
+) {
   const arraySchema = z
     .array(
       z
         .string({ error: `Cada código de ${fieldLabel} deve ser texto` })
         .trim()
         .min(1, { error: `Cada código de ${fieldLabel} deve ser informado` })
-        .max(64, { error: `Cada código de ${fieldLabel} deve ter no máximo 64 caracteres` }),
+        .max(64, {
+          error: `Cada código de ${fieldLabel} deve ter no máximo 64 caracteres`,
+        }),
       { error: `O campo ${fieldLabel} deve ser uma lista` },
     )
     .superRefine((value, ctx) => {
@@ -206,7 +214,11 @@ export const meEventsFilterQuerySchema = z.object({
   filter: z
     .preprocess(
       (value) => {
-        if (value === null || value === undefined || typeof value !== "string") {
+        if (
+          value === null ||
+          value === undefined ||
+          typeof value !== "string"
+        ) {
           return value;
         }
 
@@ -228,8 +240,14 @@ export const createEventBodySchema = z
   .object({
     title: requiredTrimmedString(255, "título"),
     summary: requiredTrimmedString(textColumnMaxLength, "resumo"),
-    description: nullableOptionalTrimmedString(textColumnMaxLength, "descrição"),
-    rulesTerms: nullableOptionalTrimmedString(textColumnMaxLength, "termos e regras"),
+    description: nullableOptionalTrimmedString(
+      textColumnMaxLength,
+      "descrição",
+    ),
+    rulesTerms: nullableOptionalTrimmedString(
+      textColumnMaxLength,
+      "termos e regras",
+    ),
     startsAt: z.iso.datetime({
       error: "A data de início deve estar em formato ISO 8601",
     }),
@@ -250,7 +268,10 @@ export const createEventBodySchema = z
       })
       .nullable()
       .optional(),
-    highlightSkill: nullableOptionalTrimmedString(255, "habilidade em destaque"),
+    highlightSkill: nullableOptionalTrimmedString(
+      255,
+      "habilidade em destaque",
+    ),
     typeCodes: lookupCodeArraySchema("tipos de evento", { required: true }),
     requirementCodes: lookupCodeArraySchema("requisitos", { required: false }),
     publish: z.boolean({ error: "Informe se o evento deve ser publicado" }),
@@ -273,16 +294,20 @@ export const patchEventBodySchema = z
   .object({
     title: requiredTrimmedString(255, "título").optional(),
     summary: requiredTrimmedString(textColumnMaxLength, "resumo").optional(),
-    description: nullableOptionalTrimmedString(textColumnMaxLength, "descrição"),
-    rulesTerms: nullableOptionalTrimmedString(textColumnMaxLength, "termos e regras"),
-    startsAt: z
-      .iso
+    description: nullableOptionalTrimmedString(
+      textColumnMaxLength,
+      "descrição",
+    ),
+    rulesTerms: nullableOptionalTrimmedString(
+      textColumnMaxLength,
+      "termos e regras",
+    ),
+    startsAt: z.iso
       .datetime({
         error: "A data de início deve estar em formato ISO 8601",
       })
       .optional(),
-    endsAt: z
-      .iso
+    endsAt: z.iso
       .datetime({
         error: "A data de término deve estar em formato ISO 8601",
       })
@@ -299,11 +324,20 @@ export const patchEventBodySchema = z
       })
       .nullable()
       .optional(),
-    highlightSkill: nullableOptionalTrimmedString(255, "habilidade em destaque"),
+    highlightSkill: nullableOptionalTrimmedString(
+      255,
+      "habilidade em destaque",
+    ),
     coverImageUrl: nullableOptionalHttpUrlSchema("URL da imagem de capa"),
-    typeCodes: lookupCodeArraySchema("tipos de evento", { required: true }).optional(),
-    requirementCodes: lookupCodeArraySchema("requisitos", { required: false }).optional(),
-    publish: z.boolean({ error: "Informe se o evento deve ser publicado" }).optional(),
+    typeCodes: lookupCodeArraySchema("tipos de evento", {
+      required: true,
+    }).optional(),
+    requirementCodes: lookupCodeArraySchema("requisitos", {
+      required: false,
+    }).optional(),
+    publish: z
+      .boolean({ error: "Informe se o evento deve ser publicado" })
+      .optional(),
   })
   .superRefine((value, ctx) => {
     if (Object.keys(value).length === 0) {
@@ -333,10 +367,9 @@ export const patchEventBodySchema = z
   });
 
 export const updateOrganizerRegistrationBodySchema = z.object({
-  status: z
-    .enum(["pending", "confirmed", "cancelled"], {
-      error: "O status deve ser pending, confirmed ou cancelled",
-    }),
+  status: z.enum(["pending", "confirmed", "cancelled"], {
+    error: "O status deve ser pending, confirmed ou cancelled",
+  }),
 });
 
 export const meEventIdParamsSchema = z.object({
@@ -382,8 +415,7 @@ export function registerMeBoundaryContract(
     "MyRegistrationItem",
     z.object({
       id: z.number().int(),
-      status: z
-        .enum(["pending", "confirmed", "cancelled"]),
+      status: z.enum(["pending", "confirmed", "cancelled"]),
       event: z.object({
         id: z.number().int(),
         title: z.string(),
@@ -423,14 +455,13 @@ export function registerMeBoundaryContract(
         z.object({
           id: z.string(),
           title: z.string(),
-          filter: z
-            .enum(["upcoming", "past", "ongoing"]),
+          filter: z.enum(["upcoming", "past", "ongoing"]),
           statusLabel: z.string(),
           description: z.string(),
+          coverImageUrl: z.url().nullable(),
           imageClassName: z.string(),
           startsAt: z.iso.datetime(),
-          status: z
-            .enum(["draft", "published", "cancelled"]),
+          status: z.enum(["draft", "published", "cancelled"]),
         }),
       ),
     }),
@@ -443,38 +474,28 @@ export function registerMeBoundaryContract(
       organizer_id: z.number().int(),
       title: z.string(),
       summary: z.string(),
-      description: z
-        .string()
-        .nullable(),
-      rules_terms: z
-        .string()
-        .nullable(),
+      description: z.string().nullable(),
+      rules_terms: z.string().nullable(),
       starts_at: z.iso.datetime(),
       ends_at: z.iso.datetime().nullable(),
-      location_name: z
-        .string()
-        .nullable(),
+      location_name: z.string().nullable(),
       is_remote: z.boolean(),
       capacity: z.number().int().nullable(),
       cover_image_url: z.url().nullable(),
-      highlight_skill: z
-        .string()
-        .nullable(),
-      status: z
-        .enum(["draft", "published", "cancelled"]),
+      highlight_skill: z.string().nullable(),
+      status: z.enum(["draft", "published", "cancelled"]),
       created_at: z.iso.datetime().optional(),
       updated_at: z.iso.datetime().optional(),
       types: z.array(shared.lookupOptionSchema),
       requirements: z.array(shared.lookupOptionSchema),
-      computedStatus: z
-        .enum([
-          "draft",
-          "published",
-          "cancelled",
-          "upcoming",
-          "ongoing",
-          "past",
-        ]),
+      computedStatus: z.enum([
+        "draft",
+        "published",
+        "cancelled",
+        "upcoming",
+        "ongoing",
+        "past",
+      ]),
     }),
   );
 
@@ -490,8 +511,7 @@ export function registerMeBoundaryContract(
           phone: z.string(),
           cityUf: z.string(),
           registrationDate: z.iso.datetime(),
-          status: z
-            .enum(["pending", "confirmed", "cancelled"]),
+          status: z.enum(["pending", "confirmed", "cancelled"]),
         }),
       ),
     }),
@@ -501,8 +521,7 @@ export function registerMeBoundaryContract(
     "UpdateRegistrationStatusResponse",
     z.object({
       id: z.number().int(),
-      status: z
-        .enum(["pending", "confirmed", "cancelled"]),
+      status: z.enum(["pending", "confirmed", "cancelled"]),
     }),
   );
 
@@ -745,7 +764,8 @@ export function registerMeBoundaryContract(
         content: { "application/json": { schema: organizerEventSchema } },
       },
       "400": {
-        description: "Payload inválido, códigos de catálogo inválidos ou datas inválidas.",
+        description:
+          "Payload inválido, códigos de catálogo inválidos ou datas inválidas.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "401": {
@@ -836,7 +856,8 @@ export function registerMeBoundaryContract(
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "422": {
-        description: "Status da inscrição não pode ser alterado no estado atual.",
+        description:
+          "Status da inscrição não pode ser alterado no estado atual.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "500": {

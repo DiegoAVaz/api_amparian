@@ -3,6 +3,8 @@ import { HttpError } from "../../utils/http-error";
 import { organizerDisplayName } from "../../utils/organizer-name";
 import type { EventRepository } from "../../repositories/event.repository";
 import type { RegistrationRepository } from "../../repositories/registration.repository";
+import { storageKeyOf } from "../../services/storage";
+import type { PublicUrlResolver } from "../../services/storage";
 
 function isDuplicateRegistrationError(error: unknown): boolean {
   const err = error as {
@@ -19,7 +21,10 @@ function isDuplicateRegistrationError(error: unknown): boolean {
 }
 
 export class ListPublicEventsUseCase {
-  constructor(private readonly events: EventRepository) {}
+  constructor(
+    private readonly events: EventRepository,
+    private readonly resolvePublicUrl: PublicUrlResolver,
+  ) {}
 
   async execute(params: { q?: string; page: number; limit: number }) {
     const { rows, total } = await this.events.findPublishedListRow(params);
@@ -36,8 +41,10 @@ export class ListPublicEventsUseCase {
       locationName: r.location_name as string | null,
       isRemote: Boolean(r.is_remote),
       capacity: r.capacity === null ? null : Number(r.capacity),
-      coverImageUrl: r.cover_image_url as string | null,
-      imageKey: null,
+      // A coluna guarda a chave do blob; a URL sai daqui. `imageKey` deixa de
+      // ser um `null` fixo e passa a devolver o valor real.
+      coverImageUrl: this.resolvePublicUrl(r.cover_image_url as string | null),
+      imageKey: storageKeyOf(r.cover_image_url as string | null),
     }));
 
     return { data, meta: { page: params.page, limit: params.limit, total } };
@@ -45,7 +52,10 @@ export class ListPublicEventsUseCase {
 }
 
 export class GetPublicEventUseCase {
-  constructor(private readonly events: EventRepository) {}
+  constructor(
+    private readonly events: EventRepository,
+    private readonly resolvePublicUrl: PublicUrlResolver,
+  ) {}
 
   async execute(eventId: number) {
     const row = await this.events.findPublishedByIdWithOrganizer(eventId);
@@ -79,7 +89,9 @@ export class GetPublicEventUseCase {
       isRemote: Boolean(row.is_remote),
       capacity: row.capacity === null ? null : Number(row.capacity),
       highlightSkill: (row.highlight_skill as string | null) ?? null,
-      coverImageUrl: (row.cover_image_url as string | null) ?? null,
+      coverImageUrl: this.resolvePublicUrl(
+        (row.cover_image_url as string | null) ?? null,
+      ),
       types,
       requirements,
       computedStatus: computed,

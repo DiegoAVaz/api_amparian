@@ -7,6 +7,7 @@ import { RefreshTokenRepository } from "../repositories/refresh-token.repository
 import { RegistrationRepository } from "../repositories/registration.repository";
 import { UserRepository } from "../repositories/user.repository";
 import { createMailer } from "../services/mail";
+import { createPublicUrlResolver, createStorage } from "../services/storage";
 import { ListLookupsUseCase } from "../use-cases/lookup/lookup.use-cases";
 import {
   ForgotPasswordUseCase,
@@ -63,9 +64,15 @@ function buildContainer() {
   });
   const mailer = createMailer();
 
+  const resolvePublicUrl = createPublicUrlResolver(createStorage());
+
   return {
-    registerUser: new RegisterUserUseCase(userRepo, authTokens),
-    loginUser: new LoginUserUseCase(userRepo, authTokens),
+    registerUser: new RegisterUserUseCase(
+      userRepo,
+      authTokens,
+      resolvePublicUrl,
+    ),
+    loginUser: new LoginUserUseCase(userRepo, authTokens, resolvePublicUrl),
     refreshSession: new RefreshSessionUseCase(refreshTokenRepo, authTokens),
     logoutUser: new LogoutUserUseCase(refreshTokenRepo),
     forgotPassword: new ForgotPasswordUseCase(
@@ -81,24 +88,31 @@ function buildContainer() {
 
     listLookups: new ListLookupsUseCase(lookupRepo),
 
-    getProfile: new GetProfileUseCase(userRepo),
-    updateProfile: new UpdateProfileUseCase(userRepo),
+    getProfile: new GetProfileUseCase(userRepo, resolvePublicUrl),
+    updateProfile: new UpdateProfileUseCase(userRepo, resolvePublicUrl),
     getProfileStats: new GetProfileStatsUseCase(
       userRepo,
       eventRepo,
       registrationRepo,
     ),
 
-    listPublicEvents: new ListPublicEventsUseCase(eventRepo),
-    getPublicEvent: new GetPublicEventUseCase(eventRepo),
+    listPublicEvents: new ListPublicEventsUseCase(eventRepo, resolvePublicUrl),
+    getPublicEvent: new GetPublicEventUseCase(eventRepo, resolvePublicUrl),
     registerForEvent: new RegisterForEventUseCase(eventRepo, registrationRepo),
 
-    listMyEvents: new ListMyEventsUseCase(eventRepo),
-    getOrganizerEvent: new GetOrganizerEventUseCase(eventRepo),
-    createEvent: new CreateEventUseCase(eventRepo, lookupRepo),
-    updateEvent: new UpdateEventUseCase(eventRepo),
+    listMyEvents: new ListMyEventsUseCase(eventRepo, resolvePublicUrl),
+    getOrganizerEvent: new GetOrganizerEventUseCase(
+      eventRepo,
+      resolvePublicUrl,
+    ),
+    createEvent: new CreateEventUseCase(
+      eventRepo,
+      lookupRepo,
+      resolvePublicUrl,
+    ),
+    updateEvent: new UpdateEventUseCase(eventRepo, resolvePublicUrl),
     deleteEvent: new DeleteEventUseCase(eventRepo, registrationRepo),
-    publishEvent: new PublishEventUseCase(eventRepo),
+    publishEvent: new PublishEventUseCase(eventRepo, resolvePublicUrl),
     listOrganizerRegistrations: new ListOrganizerRegistrationsUseCase(
       eventRepo,
       registrationRepo,
@@ -122,4 +136,3 @@ export function getContainer(): AppContainer {
   if (!cached) cached = buildContainer();
   return cached;
 }
-

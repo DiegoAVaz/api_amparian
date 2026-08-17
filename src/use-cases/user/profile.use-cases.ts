@@ -1,4 +1,5 @@
 import { toUserPublicDto } from "../../models/user.model";
+import type { PublicUrlResolver } from "../../services/storage";
 import type { EventRepository } from "../../repositories/event.repository";
 import type { RegistrationRepository } from "../../repositories/registration.repository";
 import type { UserRepository } from "../../repositories/user.repository";
@@ -9,17 +10,23 @@ function userNotFoundError(): HttpError {
 }
 
 export class GetProfileUseCase {
-  constructor(private readonly users: UserRepository) {}
+  constructor(
+    private readonly users: UserRepository,
+    private readonly resolvePublicUrl: PublicUrlResolver,
+  ) {}
 
   async execute(userId: number) {
     const user = await this.users.findById(userId);
     if (!user) throw userNotFoundError();
-    return toUserPublicDto(user);
+    return toUserPublicDto(user, this.resolvePublicUrl);
   }
 }
 
 export class UpdateProfileUseCase {
-  constructor(private readonly users: UserRepository) {}
+  constructor(
+    private readonly users: UserRepository,
+    private readonly resolvePublicUrl: PublicUrlResolver,
+  ) {}
 
   async execute(
     userId: number,
@@ -45,13 +52,13 @@ export class UpdateProfileUseCase {
     if (Object.keys(row).length === 0) {
       const user = await this.users.findById(userId);
       if (!user) throw userNotFoundError();
-      return toUserPublicDto(user);
+      return toUserPublicDto(user, this.resolvePublicUrl);
     }
 
     await this.users.updateProfile(userId, row);
     const user = await this.users.findById(userId);
     if (!user) throw userNotFoundError();
-    return toUserPublicDto(user);
+    return toUserPublicDto(user, this.resolvePublicUrl);
   }
 }
 

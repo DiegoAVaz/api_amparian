@@ -2,6 +2,7 @@ import type { EventStatus } from "../../models/event.model";
 import type { EventRepository } from "../../repositories/event.repository";
 import type { LookupRepository } from "../../repositories/lookup.repository";
 import type { RegistrationRepository } from "../../repositories/registration.repository";
+import type { PublicUrlResolver } from "../../services/storage";
 import {
   classifyTimeFilter,
   computeEventStatus,
@@ -29,7 +30,10 @@ function isBlank(value: unknown): boolean {
 }
 
 export class ListMyEventsUseCase {
-  constructor(private readonly events: EventRepository) {}
+  constructor(
+    private readonly events: EventRepository,
+    private readonly resolvePublicUrl: PublicUrlResolver,
+  ) {}
 
   async execute(userId: number, filter?: "upcoming" | "past" | "ongoing") {
     const rows = await this.events.listByOrganizer(userId);
@@ -50,6 +54,10 @@ export class ListMyEventsUseCase {
         filter: time,
         statusLabel: organizerStatusLabel(computed),
         description: (row.description as string | null) ?? (row.summary as string),
+        // A capa real quando existe; o gradiente segue como fallback da tela.
+        coverImageUrl: this.resolvePublicUrl(
+          row.cover_image_url as string | null,
+        ),
         imageClassName: "from-teal-600 to-cyan-500",
         startsAt: new Date(row.starts_at as string).toISOString(),
         status: row.status as string,
@@ -62,7 +70,10 @@ export class ListMyEventsUseCase {
 }
 
 export class GetOrganizerEventUseCase {
-  constructor(private readonly events: EventRepository) {}
+  constructor(
+    private readonly events: EventRepository,
+    private readonly resolvePublicUrl: PublicUrlResolver,
+  ) {}
 
   async execute(userId: number, eventId: number) {
     const row = await this.events.findByOrganizerAndId(userId, eventId);
@@ -77,6 +88,12 @@ export class GetOrganizerEventUseCase {
     return {
       ...row,
       id: Number(row.id),
+      // Vem depois do spread de propósito: a coluna guarda a chave do blob, e
+      // esta resposta expõe `cover_image_url` cru para o front. Sem sobrescrever
+      // aqui, a tela do organizador receberia a chave no lugar da URL.
+      cover_image_url: this.resolvePublicUrl(
+        row.cover_image_url as string | null,
+      ),
       types,
       requirements,
       computedStatus: computed,
@@ -88,6 +105,7 @@ export class CreateEventUseCase {
   constructor(
     private readonly events: EventRepository,
     private readonly lookups: LookupRepository,
+    private readonly resolvePublicUrl: PublicUrlResolver,
   ) {}
 
   async execute(
@@ -166,12 +184,18 @@ export class CreateEventUseCase {
       return id;
     });
 
-    return new GetOrganizerEventUseCase(this.events).execute(userId, eventId);
+    return new GetOrganizerEventUseCase(
+      this.events,
+      this.resolvePublicUrl,
+    ).execute(userId, eventId);
   }
 }
 
 export class UpdateEventUseCase {
-  constructor(private readonly events: EventRepository) {}
+  constructor(
+    private readonly events: EventRepository,
+    private readonly resolvePublicUrl: PublicUrlResolver,
+  ) {}
 
   async execute(
     userId: number,
@@ -255,7 +279,10 @@ export class UpdateEventUseCase {
       }
     });
 
-    return new GetOrganizerEventUseCase(this.events).execute(userId, eventId);
+    return new GetOrganizerEventUseCase(
+      this.events,
+      this.resolvePublicUrl,
+    ).execute(userId, eventId);
   }
 }
 
@@ -311,7 +338,10 @@ export class DeleteEventUseCase {
 }
 
 export class PublishEventUseCase {
-  constructor(private readonly events: EventRepository) {}
+  constructor(
+    private readonly events: EventRepository,
+    private readonly resolvePublicUrl: PublicUrlResolver,
+  ) {}
 
   async execute(userId: number, eventId: number) {
     const event = await this.events.findByOrganizerAndId(userId, eventId);
@@ -378,7 +408,10 @@ export class PublishEventUseCase {
 
     const n = await this.events.setStatus(userId, eventId, "published");
     if (!n) throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
-    return new GetOrganizerEventUseCase(this.events).execute(userId, eventId);
+    return new GetOrganizerEventUseCase(
+      this.events,
+      this.resolvePublicUrl,
+    ).execute(userId, eventId);
   }
 }
 
