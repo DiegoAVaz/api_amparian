@@ -384,7 +384,31 @@ test("avatar upload removes the new blob when the row write matches nothing", as
   assert.deepEqual(deleted, written, "o blob novo precisa ter sido apagado");
 });
 
-test("avatar upload removes the new blob when the row write throws", async () => {
+// Espelho do caso da capa: aqui o UPDATE commitou e só depois a conexão caiu.
+test("avatar upload keeps the blob when the write actually committed before the drop", async () => {
+  const { storage, written, deleted } = fakeStorage();
+  let stored: string | null = null;
+  const users = {
+    findById: async () =>
+      stored === null ? userRow() : { ...userRow(), avatar_url: stored },
+    setAvatar: async (_id: number, value: string | null) => {
+      stored = value; // commitou...
+      throw new Error("PROTOCOL_CONNECTION_LOST"); // ...e a conexão caiu depois
+    },
+  };
+
+  await assert.rejects(() =>
+    new UploadAvatarUseCase(users as never, storage, fakePublicUrl, MAX).execute(
+      9,
+      PNG,
+    ),
+  );
+
+  assert.equal(written.length, 1);
+  assert.deepEqual(deleted, [], "apagar aqui quebraria a foto do perfil");
+});
+
+test("avatar upload removes the blob when the re-read proves the write did not apply", async () => {
   const { storage, written, deleted } = fakeStorage();
   const users = {
     findById: async () => userRow(),
@@ -410,10 +434,10 @@ test("avatar upload removes the new blob when the row write throws", async () =>
 // nova gravada, apagar o blob deixaria a linha apontando para o nada.
 test("cover upload keeps the blob when the write actually committed before the drop", async () => {
   const { storage, written, deleted } = fakeStorage();
-  let gravada: string | null = null;
+  let stored: string | null = null;
   const events = eventRepo({
     findByOrganizerAndId: async () =>
-      gravada === null
+      stored === null
         ? {
             id: 12,
             starts_at: futureIso(2),
@@ -421,9 +445,9 @@ test("cover upload keeps the blob when the write actually committed before the d
             status: "published",
             cover_image_url: null,
           }
-        : { id: 12, cover_image_url: gravada },
+        : { id: 12, cover_image_url: stored },
     setCoverImage: async (_o: number, _e: number, value: string | null) => {
-      gravada = value; // commitou...
+      stored = value; // commitou...
       throw new Error("PROTOCOL_CONNECTION_LOST"); // ...e a conexão caiu depois
     },
   });
@@ -437,7 +461,7 @@ test("cover upload keeps the blob when the write actually committed before the d
     ).execute(7, 12, PNG),
   );
 
-  assert.deepEqual(written.length, 1);
+  assert.equal(written.length, 1);
   assert.deepEqual(deleted, [], "apagar aqui quebraria a imagem do evento");
 });
 

@@ -21,14 +21,14 @@ export function createPublicUrlResolver(storage: Storage): PublicUrlResolver {
       return storage.publicUrl(value);
     } catch (error) {
       const code = (error as { code?: unknown }).code;
-      const detalhe = value.slice(0, 80);
+      const detail = value.slice(0, 80);
       if (code === "INVALID_STORAGE_KEY") {
         console.warn(
-          `[storage] chave inválida no banco, imagem omitida: ${detalhe}`,
+          `[storage] chave inválida no banco, imagem omitida: ${detail}`,
         );
       } else {
         console.error(
-          `[storage] falha ao montar URL pública (imagem omitida): ${detalhe}`,
+          `[storage] falha ao montar URL pública (imagem omitida): ${detail}`,
           error,
         );
       }

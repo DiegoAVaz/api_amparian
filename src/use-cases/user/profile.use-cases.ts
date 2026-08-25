@@ -92,6 +92,20 @@ export class GetProfileStatsUseCase {
   }
 }
 
+async function deleteBlobIfWriteDidNotApply(
+  users: UserRepository,
+  storage: Storage,
+  ref: { userId: number; key: string },
+): Promise<void> {
+  try {
+    const row = await users.findById(ref.userId);
+    if (row?.avatar_url === ref.key) return;
+  } catch {
+    return;
+  }
+  await deleteBlobIfOurs(storage, ref.key);
+}
+
 export class UploadAvatarUseCase {
   constructor(
     private readonly users: UserRepository,
@@ -113,7 +127,10 @@ export class UploadAvatarUseCase {
     try {
       changed = await this.users.setAvatar(userId, key);
     } catch (error) {
-      await deleteBlobIfOurs(this.storage, key);
+      await deleteBlobIfWriteDidNotApply(this.users, this.storage, {
+        userId,
+        key,
+      });
       throw error;
     }
 

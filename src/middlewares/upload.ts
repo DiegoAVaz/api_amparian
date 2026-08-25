@@ -60,8 +60,8 @@ function toClientError(error: unknown, maxBytes: number): HttpError {
   const translated = toUploadHttpError(error, maxBytes);
   if (translated instanceof HttpError) return translated;
 
-  const motivo = error instanceof Error ? error.message : String(error);
-  console.warn(`[upload] multipart ilegível: ${motivo}`);
+  const reason = error instanceof Error ? error.message : String(error);
+  console.warn(`[upload] multipart ilegível: ${reason}`);
 
   return httpError(
     400,
