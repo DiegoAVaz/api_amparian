@@ -17,6 +17,15 @@ export async function assertHttpError(
   assert.fail(`Expected HttpError ${expected.status} ${expected.code}`);
 }
 
+/**
+ * Resolvedor de URL pública para os testes, sem tocar no Azure.
+ */
+export function fakePublicUrl(value: string | null): string | null {
+  if (!value) return null;
+  if (value.startsWith("http://") || value.startsWith("https://")) return value;
+  return `https://cdn.teste/${value}`;
+}
+
 export function futureIso(days = 1): string {
   return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 }

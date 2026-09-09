@@ -84,7 +84,7 @@ export function registerEventsBoundaryContract(
       isRemote: z.boolean(),
       capacity: z.number().int().nullable(),
       coverImageUrl: z.url().nullable(),
-      imageKey: z.null(),
+      imageKey: z.string().nullable(),
     }),
   );
 
@@ -258,4 +258,3 @@ export function registerEventsBoundaryContract(
     },
   });
 }
-

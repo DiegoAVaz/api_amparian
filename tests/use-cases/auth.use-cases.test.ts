@@ -12,7 +12,7 @@ import {
   ResetPasswordUseCase,
 } from "../../src/use-cases/auth/auth.use-cases";
 import { sha256Hex } from "../../src/utils/hash";
-import { assertHttpError, futureIso, pastIso } from "../helpers";
+import { assertHttpError, futureIso, pastIso, fakePublicUrl } from "../helpers";
 
 function user(overrides: Record<string, unknown> = {}) {
   return {
@@ -49,7 +49,7 @@ test("register creates user and returns session without password hash", async ()
     }),
   };
 
-  const result = await new RegisterUserUseCase(users as never, tokens as never).execute({
+  const result = await new RegisterUserUseCase(users as never, tokens as never, fakePublicUrl).execute({
     email: "new@example.com",
     password: "Senha@123",
     name: "Novo Usuario",
@@ -73,7 +73,7 @@ test("register returns 409 when email already exists or duplicate insert happens
           emailExists: async () => true,
         } as never,
         {} as never,
-      ).execute({
+       fakePublicUrl).execute({
         email: "exists@example.com",
         password: "Senha@123",
         name: "Usuario",
@@ -91,7 +91,7 @@ test("register returns 409 when email already exists or duplicate insert happens
           },
         } as never,
         {} as never,
-      ).execute({
+       fakePublicUrl).execute({
         email: "race@example.com",
         password: "Senha@123",
         name: "Usuario",
@@ -115,7 +115,7 @@ test("login returns session for valid credentials and 401 otherwise", async () =
       findByEmailWithPassword: async () => user({ password_hash }),
     } as never,
     tokens as never,
-  ).execute({ email: "user@example.com", password: "Senha@123" });
+   fakePublicUrl).execute({ email: "user@example.com", password: "Senha@123" });
 
   assert.equal(result.accessToken, "access-1");
   assert.equal(result.user.email, "user@example.com");
@@ -126,7 +126,7 @@ test("login returns session for valid credentials and 401 otherwise", async () =
       new LoginUserUseCase(
         { findByEmailWithPassword: async () => undefined } as never,
         tokens as never,
-      ).execute({ email: "missing@example.com", password: "Senha@123" }),
+       fakePublicUrl).execute({ email: "missing@example.com", password: "Senha@123" }),
     { status: 401, code: "INVALID_CREDENTIALS" },
   );
 
@@ -135,7 +135,7 @@ test("login returns session for valid credentials and 401 otherwise", async () =
       new LoginUserUseCase(
         { findByEmailWithPassword: async () => user({ password_hash }) } as never,
         tokens as never,
-      ).execute({ email: "user@example.com", password: "Senha@999" }),
+       fakePublicUrl).execute({ email: "user@example.com", password: "Senha@999" }),
     { status: 401, code: "INVALID_CREDENTIALS" },
   );
 });

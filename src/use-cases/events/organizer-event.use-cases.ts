@@ -3,16 +3,19 @@ import type { EventRepository } from "../../repositories/event.repository";
 import type { LookupRepository } from "../../repositories/lookup.repository";
 import type { RegistrationRepository } from "../../repositories/registration.repository";
 import {
+  buildEventCoverKey,
+  deleteBlobIfOurs,
+  validateImage,
+} from "../../services/storage";
+import type { PublicUrlResolver, Storage } from "../../services/storage";
+import {
   classifyTimeFilter,
   computeEventStatus,
   organizerStatusLabel,
 } from "../../utils/event-helpers";
 import { HttpError } from "../../utils/http-error";
 
-function ensureValidEventDates(
-  startsAt: Date,
-  endsAt: Date | null,
-): void {
+function ensureValidEventDates(startsAt: Date, endsAt: Date | null): void {
   if (Number.isNaN(startsAt.getTime())) {
     throw new HttpError(400, "INVALID_DATE_RANGE", "Data de início inválida");
   }
@@ -20,7 +23,11 @@ function ensureValidEventDates(
     throw new HttpError(400, "INVALID_DATE_RANGE", "Data de término inválida");
   }
   if (endsAt && endsAt.getTime() <= startsAt.getTime()) {
-    throw new HttpError(400, "INVALID_DATE_RANGE", "A data de término deve ser maior que a data de início");
+    throw new HttpError(
+      400,
+      "INVALID_DATE_RANGE",
+      "A data de término deve ser maior que a data de início",
+    );
   }
 }
 
@@ -29,7 +36,10 @@ function isBlank(value: unknown): boolean {
 }
 
 export class ListMyEventsUseCase {
-  constructor(private readonly events: EventRepository) {}
+  constructor(
+    private readonly events: EventRepository,
+    private readonly resolvePublicUrl: PublicUrlResolver,
+  ) {}
 
   async execute(userId: number, filter?: "upcoming" | "past" | "ongoing") {
     const rows = await this.events.listByOrganizer(userId);
@@ -49,24 +59,34 @@ export class ListMyEventsUseCase {
         title: row.title as string,
         filter: time,
         statusLabel: organizerStatusLabel(computed),
-        description: (row.description as string | null) ?? (row.summary as string),
+        description:
+          (row.description as string | null) ?? (row.summary as string),
+        coverImageUrl: this.resolvePublicUrl(
+          row.cover_image_url as string | null,
+        ),
         imageClassName: "from-teal-600 to-cyan-500",
         startsAt: new Date(row.starts_at as string).toISOString(),
         status: row.status as string,
       };
     });
 
-    const filtered = filter ? mapped.filter((m) => m.filter === filter) : mapped;
+    const filtered = filter
+      ? mapped.filter((m) => m.filter === filter)
+      : mapped;
     return { data: filtered };
   }
 }
 
 export class GetOrganizerEventUseCase {
-  constructor(private readonly events: EventRepository) {}
+  constructor(
+    private readonly events: EventRepository,
+    private readonly resolvePublicUrl: PublicUrlResolver,
+  ) {}
 
   async execute(userId: number, eventId: number) {
     const row = await this.events.findByOrganizerAndId(userId, eventId);
-    if (!row) throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
+    if (!row)
+      throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
     const types = await this.events.findTypesForEvent(eventId);
     const requirements = await this.events.findRequirementsForEvent(eventId);
     const computed = computeEventStatus({
@@ -77,6 +97,9 @@ export class GetOrganizerEventUseCase {
     return {
       ...row,
       id: Number(row.id),
+      cover_image_url: this.resolvePublicUrl(
+        row.cover_image_url as string | null,
+      ),
       types,
       requirements,
       computedStatus: computed,
@@ -88,6 +111,7 @@ export class CreateEventUseCase {
   constructor(
     private readonly events: EventRepository,
     private readonly lookups: LookupRepository,
+    private readonly resolvePublicUrl: PublicUrlResolver,
   ) {}
 
   async execute(
@@ -106,7 +130,6 @@ export class CreateEventUseCase {
       typeCodes: string[];
       requirementCodes: string[];
       publish: boolean;
-      coverImageUrl?: string | null;
     },
   ) {
     const status: EventStatus = body.publish ? "published" : "draft";
@@ -117,7 +140,9 @@ export class CreateEventUseCase {
     const typeIds = await this.lookups.findEventTypeIdsByCodes(body.typeCodes);
     if (typeIds.length !== body.typeCodes.length) {
       const validCodes = new Set(typeIds.map((type) => type.code));
-      const invalidCodes = body.typeCodes.filter((code) => !validCodes.has(code));
+      const invalidCodes = body.typeCodes.filter(
+        (code) => !validCodes.has(code),
+      );
       throw new HttpError(
         400,
         "INVALID_EVENT_TYPES",
@@ -125,10 +150,14 @@ export class CreateEventUseCase {
       );
     }
 
-    const reqIds = await this.lookups.findRequirementIdsByCodes(body.requirementCodes);
+    const reqIds = await this.lookups.findRequirementIdsByCodes(
+      body.requirementCodes,
+    );
     if (reqIds.length !== body.requirementCodes.length) {
       const validCodes = new Set(reqIds.map((requirement) => requirement.code));
-      const invalidCodes = body.requirementCodes.filter((code) => !validCodes.has(code));
+      const invalidCodes = body.requirementCodes.filter(
+        (code) => !validCodes.has(code),
+      );
       throw new HttpError(
         400,
         "INVALID_REQUIREMENTS",
@@ -149,7 +178,6 @@ export class CreateEventUseCase {
         is_remote: body.isRemote,
         capacity: body.capacity ?? null,
         highlight_skill: body.highlightSkill ?? null,
-        cover_image_url: body.coverImageUrl ?? null,
         status,
       });
 
@@ -166,12 +194,18 @@ export class CreateEventUseCase {
       return id;
     });
 
-    return new GetOrganizerEventUseCase(this.events).execute(userId, eventId);
+    return new GetOrganizerEventUseCase(
+      this.events,
+      this.resolvePublicUrl,
+    ).execute(userId, eventId);
   }
 }
 
 export class UpdateEventUseCase {
-  constructor(private readonly events: EventRepository) {}
+  constructor(
+    private readonly events: EventRepository,
+    private readonly resolvePublicUrl: PublicUrlResolver,
+  ) {}
 
   async execute(
     userId: number,
@@ -187,18 +221,26 @@ export class UpdateEventUseCase {
       isRemote: boolean;
       capacity: number | null;
       highlightSkill: string | null;
-      coverImageUrl: string | null;
       typeCodes: string[];
       requirementCodes: string[];
       publish: boolean;
     }>,
   ) {
     const existing = await this.events.findByOrganizerAndId(userId, eventId);
-    if (!existing) throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
-    const nextStartsAt = patch.startsAt !== undefined ? new Date(patch.startsAt) : new Date(existing.starts_at);
-    const nextEndsAt = patch.endsAt !== undefined
-      ? (patch.endsAt ? new Date(patch.endsAt) : null)
-      : (existing.ends_at ? new Date(existing.ends_at) : null);
+    if (!existing)
+      throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
+    const nextStartsAt =
+      patch.startsAt !== undefined
+        ? new Date(patch.startsAt)
+        : new Date(existing.starts_at);
+    const nextEndsAt =
+      patch.endsAt !== undefined
+        ? patch.endsAt
+          ? new Date(patch.endsAt)
+          : null
+        : existing.ends_at
+          ? new Date(existing.ends_at)
+          : null;
     ensureValidEventDates(nextStartsAt, nextEndsAt);
 
     await this.events.transaction(async (trx) => {
@@ -207,22 +249,30 @@ export class UpdateEventUseCase {
       if (patch.summary !== undefined) row.summary = patch.summary;
       if (patch.description !== undefined) row.description = patch.description;
       if (patch.rulesTerms !== undefined) row.rules_terms = patch.rulesTerms;
-      if (patch.startsAt !== undefined) row.starts_at = new Date(patch.startsAt);
-      if (patch.endsAt !== undefined) row.ends_at = patch.endsAt ? new Date(patch.endsAt) : null;
-      if (patch.locationName !== undefined) row.location_name = patch.locationName;
+      if (patch.startsAt !== undefined)
+        row.starts_at = new Date(patch.startsAt);
+      if (patch.endsAt !== undefined)
+        row.ends_at = patch.endsAt ? new Date(patch.endsAt) : null;
+      if (patch.locationName !== undefined)
+        row.location_name = patch.locationName;
       if (patch.isRemote !== undefined) row.is_remote = patch.isRemote;
       if (patch.capacity !== undefined) row.capacity = patch.capacity;
-      if (patch.highlightSkill !== undefined) row.highlight_skill = patch.highlightSkill;
-      if (patch.coverImageUrl !== undefined) row.cover_image_url = patch.coverImageUrl;
-      if (patch.publish !== undefined) row.status = patch.publish ? "published" : "draft";
+      if (patch.highlightSkill !== undefined)
+        row.highlight_skill = patch.highlightSkill;
+      if (patch.publish !== undefined)
+        row.status = patch.publish ? "published" : "draft";
 
       await this.events.updateEvent(trx, eventId, row);
 
       if (patch.typeCodes !== undefined) {
-        const typeIds = await trx("event_types").whereIn("code", patch.typeCodes).select("id", "code");
+        const typeIds = await trx("event_types")
+          .whereIn("code", patch.typeCodes)
+          .select("id", "code");
         if (typeIds.length !== patch.typeCodes.length) {
           const validCodes = new Set(typeIds.map((type) => type.code));
-          const invalidCodes = patch.typeCodes.filter((code) => !validCodes.has(code));
+          const invalidCodes = patch.typeCodes.filter(
+            (code) => !validCodes.has(code),
+          );
           throw new HttpError(
             400,
             "INVALID_EVENT_TYPES",
@@ -237,10 +287,16 @@ export class UpdateEventUseCase {
       }
 
       if (patch.requirementCodes !== undefined) {
-        const reqIds = await trx("requirement_options").whereIn("code", patch.requirementCodes).select("id", "code");
+        const reqIds = await trx("requirement_options")
+          .whereIn("code", patch.requirementCodes)
+          .select("id", "code");
         if (reqIds.length !== patch.requirementCodes.length) {
-          const validCodes = new Set(reqIds.map((requirement) => requirement.code));
-          const invalidCodes = patch.requirementCodes.filter((code) => !validCodes.has(code));
+          const validCodes = new Set(
+            reqIds.map((requirement) => requirement.code),
+          );
+          const invalidCodes = patch.requirementCodes.filter(
+            (code) => !validCodes.has(code),
+          );
           throw new HttpError(
             400,
             "INVALID_REQUIREMENTS",
@@ -255,7 +311,10 @@ export class UpdateEventUseCase {
       }
     });
 
-    return new GetOrganizerEventUseCase(this.events).execute(userId, eventId);
+    return new GetOrganizerEventUseCase(
+      this.events,
+      this.resolvePublicUrl,
+    ).execute(userId, eventId);
   }
 }
 
@@ -263,14 +322,20 @@ export class DeleteEventUseCase {
   constructor(
     private readonly events: EventRepository,
     private readonly registrations: RegistrationRepository,
+    private readonly storage: Storage,
   ) {}
 
   async execute(userId: number, eventId: number): Promise<void> {
     const event = await this.events.findByOrganizerAndId(userId, eventId);
-    if (!event) throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
+    if (!event)
+      throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
 
     if (event.status === "cancelled") {
-      throw new HttpError(422, "EVENT_ALREADY_CANCELLED", "Evento já cancelado");
+      throw new HttpError(
+        422,
+        "EVENT_ALREADY_CANCELLED",
+        "Evento já cancelado",
+      );
     }
 
     const startsAt = new Date(event.starts_at);
@@ -280,12 +345,23 @@ export class DeleteEventUseCase {
       (endsAt !== null && Number.isNaN(endsAt.getTime())) ||
       (endsAt !== null && endsAt.getTime() <= startsAt.getTime())
     ) {
-      throw new HttpError(422, "INVALID_EVENT_DATES", "Corrija as datas do evento antes de remover");
+      throw new HttpError(
+        422,
+        "INVALID_EVENT_DATES",
+        "Corrija as datas do evento antes de remover",
+      );
     }
 
     const now = new Date();
-    if ((endsAt !== null && endsAt < now) || (endsAt === null && startsAt < now)) {
-      throw new HttpError(422, "EVENT_ENDED", "Não é possível remover evento encerrado");
+    if (
+      (endsAt !== null && endsAt < now) ||
+      (endsAt === null && startsAt < now)
+    ) {
+      throw new HttpError(
+        422,
+        "EVENT_ENDED",
+        "Não é possível remover evento encerrado",
+      );
     }
 
     const computed = computeEventStatus({
@@ -295,34 +371,54 @@ export class DeleteEventUseCase {
     });
 
     if (computed === "ended") {
-      throw new HttpError(422, "EVENT_ENDED", "Não é possível remover evento encerrado");
+      throw new HttpError(
+        422,
+        "EVENT_ENDED",
+        "Não é possível remover evento encerrado",
+      );
     }
 
     const totalRegistrations = await this.registrations.countByEvent(eventId);
     if (event.status === "published" || totalRegistrations > 0) {
       const n = await this.events.setStatus(userId, eventId, "cancelled");
-      if (!n) throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
+      if (!n)
+        throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
       return;
     }
 
     const n = await this.events.deleteByOrganizer(userId, eventId);
-    if (!n) throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
+    if (!n)
+      throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
+
+    await deleteBlobIfOurs(this.storage, event.cover_image_url);
   }
 }
 
 export class PublishEventUseCase {
-  constructor(private readonly events: EventRepository) {}
+  constructor(
+    private readonly events: EventRepository,
+    private readonly resolvePublicUrl: PublicUrlResolver,
+  ) {}
 
   async execute(userId: number, eventId: number) {
     const event = await this.events.findByOrganizerAndId(userId, eventId);
-    if (!event) throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
+    if (!event)
+      throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
 
     if (event.status === "cancelled") {
-      throw new HttpError(422, "EVENT_CANCELLED", "Não é possível publicar evento cancelado");
+      throw new HttpError(
+        422,
+        "EVENT_CANCELLED",
+        "Não é possível publicar evento cancelado",
+      );
     }
 
     if (event.status === "published") {
-      throw new HttpError(422, "EVENT_ALREADY_PUBLISHED", "Evento já publicado");
+      throw new HttpError(
+        422,
+        "EVENT_ALREADY_PUBLISHED",
+        "Evento já publicado",
+      );
     }
 
     const startsAt = new Date(event.starts_at);
@@ -333,12 +429,23 @@ export class PublishEventUseCase {
       (endsAt !== null && Number.isNaN(endsAt.getTime())) ||
       (endsAt !== null && endsAt.getTime() <= startsAt.getTime())
     ) {
-      throw new HttpError(422, "INVALID_EVENT_DATES", "Corrija as datas do evento antes de publicar");
+      throw new HttpError(
+        422,
+        "INVALID_EVENT_DATES",
+        "Corrija as datas do evento antes de publicar",
+      );
     }
 
     const now = new Date();
-    if ((endsAt !== null && endsAt < now) || (endsAt === null && startsAt < now)) {
-      throw new HttpError(422, "EVENT_ENDED", "Não é possível publicar evento encerrado");
+    if (
+      (endsAt !== null && endsAt < now) ||
+      (endsAt === null && startsAt < now)
+    ) {
+      throw new HttpError(
+        422,
+        "EVENT_ENDED",
+        "Não é possível publicar evento encerrado",
+      );
     }
 
     const computed = computeEventStatus({
@@ -348,7 +455,11 @@ export class PublishEventUseCase {
     });
 
     if (computed === "ended") {
-      throw new HttpError(422, "EVENT_ENDED", "Não é possível publicar evento encerrado");
+      throw new HttpError(
+        422,
+        "EVENT_ENDED",
+        "Não é possível publicar evento encerrado",
+      );
     }
 
     if (isBlank(event.title) || isBlank(event.summary)) {
@@ -377,8 +488,12 @@ export class PublishEventUseCase {
     }
 
     const n = await this.events.setStatus(userId, eventId, "published");
-    if (!n) throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
-    return new GetOrganizerEventUseCase(this.events).execute(userId, eventId);
+    if (!n)
+      throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
+    return new GetOrganizerEventUseCase(
+      this.events,
+      this.resolvePublicUrl,
+    ).execute(userId, eventId);
   }
 }
 
@@ -390,7 +505,8 @@ export class ListOrganizerRegistrationsUseCase {
 
   async execute(organizerId: number, eventId: number) {
     const ev = await this.events.findByOrganizerAndId(organizerId, eventId);
-    if (!ev) throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
+    if (!ev)
+      throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
 
     const rows = await this.registrations.listForOrganizerEvent(eventId);
 
@@ -398,9 +514,12 @@ export class ListOrganizerRegistrationsUseCase {
       const city = (r.city as string | null) ?? "";
       const state = (r.state as string | null) ?? "";
       const cityUf = city && state ? `${city} / ${state}` : city || state || "";
-      const status = r.status === "confirmed" || r.status === "pending" || r.status === "cancelled"
-        ? r.status
-        : "pending";
+      const status =
+        r.status === "confirmed" ||
+        r.status === "pending" ||
+        r.status === "cancelled"
+          ? r.status
+          : "pending";
 
       return {
         id: String(Number(r.id)),
@@ -437,7 +556,11 @@ export class UpdateRegistrationStatusUseCase {
       }
 
       if (ev.status === "cancelled") {
-        throw new HttpError(422, "EVENT_CANCELLED", "Não é possível alterar inscrição de evento cancelado");
+        throw new HttpError(
+          422,
+          "EVENT_CANCELLED",
+          "Não é possível alterar inscrição de evento cancelado",
+        );
       }
 
       const startsAt = new Date(ev.starts_at);
@@ -447,38 +570,165 @@ export class UpdateRegistrationStatusUseCase {
         (endsAt !== null && Number.isNaN(endsAt.getTime())) ||
         (endsAt !== null && endsAt.getTime() <= startsAt.getTime())
       ) {
-        throw new HttpError(422, "INVALID_EVENT_DATES", "Corrija as datas do evento antes de alterar inscrições");
+        throw new HttpError(
+          422,
+          "INVALID_EVENT_DATES",
+          "Corrija as datas do evento antes de alterar inscrições",
+        );
       }
 
       const now = new Date();
-      if ((endsAt !== null && endsAt < now) || (endsAt === null && startsAt < now)) {
-        throw new HttpError(422, "EVENT_ENDED", "Não é possível alterar inscrição de evento encerrado");
+      if (
+        (endsAt !== null && endsAt < now) ||
+        (endsAt === null && startsAt < now)
+      ) {
+        throw new HttpError(
+          422,
+          "EVENT_ENDED",
+          "Não é possível alterar inscrição de evento encerrado",
+        );
       }
 
-      const registration = await this.registrations.findByEventAndIdForUpdate(eventId, registrationId, trx);
+      const registration = await this.registrations.findByEventAndIdForUpdate(
+        eventId,
+        registrationId,
+        trx,
+      );
       if (!registration) {
-        throw new HttpError(404, "REGISTRATION_NOT_FOUND", "Inscrição não encontrada");
+        throw new HttpError(
+          404,
+          "REGISTRATION_NOT_FOUND",
+          "Inscrição não encontrada",
+        );
       }
 
       if (registration.status === status) {
-        throw new HttpError(422, "REGISTRATION_STATUS_UNCHANGED", "Inscrição já está com este status");
+        throw new HttpError(
+          422,
+          "REGISTRATION_STATUS_UNCHANGED",
+          "Inscrição já está com este status",
+        );
       }
 
       if (registration.status === "cancelled") {
-        throw new HttpError(422, "REGISTRATION_ALREADY_CANCELLED", "Não é possível reativar inscrição cancelada");
+        throw new HttpError(
+          422,
+          "REGISTRATION_ALREADY_CANCELLED",
+          "Não é possível reativar inscrição cancelada",
+        );
       }
 
       if (status === "confirmed" && ev.capacity !== null) {
-        const activeRegistrations = await this.registrations.countActiveByEvent(eventId, trx);
+        const activeRegistrations = await this.registrations.countActiveByEvent(
+          eventId,
+          trx,
+        );
         if (activeRegistrations > Number(ev.capacity)) {
-          throw new HttpError(422, "CAPACITY_FULL", "A capacidade do evento já foi ultrapassada");
+          throw new HttpError(
+            422,
+            "CAPACITY_FULL",
+            "A capacidade do evento já foi ultrapassada",
+          );
         }
       }
 
-      const n = await this.registrations.updateStatus(eventId, registrationId, status, trx);
-      if (!n) throw new HttpError(404, "REGISTRATION_NOT_FOUND", "Inscrição não encontrada");
+      const n = await this.registrations.updateStatus(
+        eventId,
+        registrationId,
+        status,
+        trx,
+      );
+      if (!n)
+        throw new HttpError(
+          404,
+          "REGISTRATION_NOT_FOUND",
+          "Inscrição não encontrada",
+        );
     });
 
     return { id: registrationId, status };
+  }
+}
+
+async function deleteBlobIfWriteDidNotApply(
+  events: EventRepository,
+  storage: Storage,
+  ref: { userId: number; eventId: number; key: string },
+): Promise<void> {
+  try {
+    const row = await events.findByOrganizerAndId(ref.userId, ref.eventId);
+    if (row?.cover_image_url === ref.key) return;
+  } catch {
+    return;
+  }
+  await deleteBlobIfOurs(storage, ref.key);
+}
+
+export class UploadEventCoverUseCase {
+  constructor(
+    private readonly events: EventRepository,
+    private readonly storage: Storage,
+    private readonly resolvePublicUrl: PublicUrlResolver,
+    private readonly maxBytes: number,
+  ) {}
+
+  async execute(userId: number, eventId: number, buffer: Buffer) {
+    const image = validateImage(buffer, this.maxBytes);
+
+    const before = await this.events.findByOrganizerAndId(userId, eventId);
+    if (!before)
+      throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
+
+    const key = buildEventCoverKey(eventId, image);
+    await this.storage.put(key, image);
+
+    let changed: number;
+    try {
+      changed = await this.events.setCoverImage(userId, eventId, key);
+    } catch (error) {
+      await deleteBlobIfWriteDidNotApply(this.events, this.storage, {
+        userId,
+        eventId,
+        key,
+      });
+      throw error;
+    }
+
+    if (!changed) {
+      await deleteBlobIfOurs(this.storage, key);
+      throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
+    }
+
+    await deleteBlobIfOurs(this.storage, before.cover_image_url);
+
+    return new GetOrganizerEventUseCase(
+      this.events,
+      this.resolvePublicUrl,
+    ).execute(userId, eventId);
+  }
+}
+
+export class DeleteEventCoverUseCase {
+  constructor(
+    private readonly events: EventRepository,
+    private readonly storage: Storage,
+    private readonly resolvePublicUrl: PublicUrlResolver,
+  ) {}
+
+  async execute(userId: number, eventId: number) {
+    const before = await this.events.findByOrganizerAndId(userId, eventId);
+    if (!before)
+      throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
+
+    const changed = await this.events.setCoverImage(userId, eventId, null);
+    if (!changed)
+      throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
+
+    await deleteBlobIfOurs(this.storage, before.cover_image_url);
+
+    return new GetOrganizerEventUseCase(
+      this.events,
+      this.resolvePublicUrl,
+    ).execute(userId, eventId);
   }
 }

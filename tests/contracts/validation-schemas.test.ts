@@ -57,23 +57,31 @@ test("reset password schema rejects weak payloads", () => {
   );
 });
 
+// `avatarUrl` saiu deste schema no api-3: a foto de perfil passou a chegar por
+// upload, em rota própria. Aceitá-la aqui deixaria o salvamento do perfil
+// sobrescrever a chave do blob pela URL, órfanando o arquivo.
 test("profile patch normalizes nullable fields", () => {
   const profile = meProfilePatchBodySchema.parse({
     phone: "11 99999 9999",
-    avatarUrl: " https://example.com/avatar.png ",
     state: "sp",
   });
 
   assert.equal(profile.phone, "11999999999");
-  assert.equal(profile.avatarUrl, "https://example.com/avatar.png");
   assert.equal(profile.state, "SP");
 
-  const empty = meProfilePatchBodySchema.parse({
-    phone: "",
-    avatarUrl: "",
-  });
+  const empty = meProfilePatchBodySchema.parse({ phone: "" });
   assert.equal(empty.phone, null);
-  assert.equal(empty.avatarUrl, null);
+});
+
+test("profile patch strips avatarUrl, which is no longer part of the contract", () => {
+  const resultado = meProfilePatchBodySchema.parse({
+    phone: "11999999999",
+    avatarUrl: "https://example.com/avatar.png",
+  });
+  assert.ok(
+    !("avatarUrl" in resultado),
+    "avatarUrl não pode atravessar a validação",
+  );
 });
 
 test("public event schemas keep contract errors as invalid requests", () => {

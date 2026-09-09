@@ -10,7 +10,20 @@ import {
   UpdateEventUseCase,
   UpdateRegistrationStatusUseCase,
 } from "../../src/use-cases/events/organizer-event.use-cases";
-import { assertHttpError, futureIso, pastIso } from "../helpers";
+import { assertHttpError, futureIso, pastIso, fakePublicUrl } from "../helpers";
+
+/** Storage falso: só `delete` importa nestes testes, e ele registra as chaves. */
+function fakeStorage(deleted: string[] = []) {
+  return {
+    put: async () => {
+      throw new Error("não deveria ser chamado");
+    },
+    delete: async (key: string) => {
+      deleted.push(key);
+    },
+    publicUrl: (key: string) => `https://cdn.teste/${key}`,
+  } as never;
+}
 
 function event(overrides: Record<string, unknown> = {}) {
   return {
@@ -42,7 +55,7 @@ test("lists organizer events and applies time filter", async () => {
     ],
   };
 
-  const result = await new ListMyEventsUseCase(events as never).execute(7, "upcoming");
+  const result = await new ListMyEventsUseCase(events as never, fakePublicUrl).execute(7, "upcoming");
 
   assert.equal(result.data.length, 1);
   assert.equal(result.data[0].id, "1");
@@ -58,7 +71,7 @@ test("gets organizer event detail with types, requirements and computed status",
     findRequirementsForEvent: async () => [{ code: "adult", label: "Maior de idade" }],
   };
 
-  const result = await new GetOrganizerEventUseCase(events as never).execute(7, 1);
+  const result = await new GetOrganizerEventUseCase(events as never, fakePublicUrl).execute(7, 1);
 
   assert.equal(result.id, 1);
   assert.equal(result.computedStatus, "active");
@@ -71,7 +84,7 @@ test("get organizer event returns 404 when event is not owned", async () => {
     () =>
       new GetOrganizerEventUseCase({
         findByOrganizerAndId: async () => undefined,
-      } as never).execute(7, 999),
+      } as never, fakePublicUrl).execute(7, 999),
     { status: 404, code: "EVENT_NOT_FOUND" },
   );
 });
@@ -101,7 +114,7 @@ test("creates organizer event and persists lookup relationships", async () => {
     findRequirementIdsByCodes: async () => [{ id: 2, code: "adult" }],
   };
 
-  const result = await new CreateEventUseCase(events as never, lookups as never).execute(7, {
+  const result = await new CreateEventUseCase(events as never, lookups as never, fakePublicUrl).execute(7, {
     title: "Evento",
     summary: "Resumo",
     startsAt: futureIso(),
@@ -126,7 +139,7 @@ test("create organizer event returns 400 for invalid lookup codes", async () => 
         {
           findEventTypeIdsByCodes: async () => [],
         } as never,
-      ).execute(7, {
+       fakePublicUrl).execute(7, {
         title: "Evento",
         summary: "Resumo",
         startsAt: futureIso(),
@@ -164,7 +177,7 @@ test("updates organizer event fields and lookup relationships", async () => {
     findRequirementsForEvent: async () => [],
   };
 
-  const result = await new UpdateEventUseCase(events as never).execute(7, 20, {
+  const result = await new UpdateEventUseCase(events as never, fakePublicUrl).execute(7, 20, {
     title: "Titulo Novo",
     publish: true,
     typeCodes: ["education"],
@@ -182,7 +195,7 @@ test("update organizer event returns 404 and invalid lookup errors", async () =>
     () =>
       new UpdateEventUseCase({
         findByOrganizerAndId: async () => undefined,
-      } as never).execute(7, 20, { title: "Novo" }),
+      } as never, fakePublicUrl).execute(7, 20, { title: "Novo" }),
     { status: 404, code: "EVENT_NOT_FOUND" },
   );
 
@@ -197,7 +210,7 @@ test("update organizer event returns 404 and invalid lookup errors", async () =>
         findByOrganizerAndId: async () => event({ id: 20 }),
         transaction: async (fn: (trxArg: typeof trx) => Promise<void>) => fn(trx),
         updateEvent: async () => undefined,
-      } as never).execute(7, 20, { typeCodes: ["invalid"] }),
+      } as never, fakePublicUrl).execute(7, 20, { typeCodes: ["invalid"] }),
     { status: 400, code: "INVALID_EVENT_TYPES" },
   );
 });
@@ -280,7 +293,7 @@ test("publishes a valid draft event", async () => {
     },
   };
 
-  const result = await new PublishEventUseCase(events as never).execute(7, 1);
+  const result = await new PublishEventUseCase(events as never, fakePublicUrl).execute(7, 1);
 
   assert.equal(Number(result.id), 1);
   assert.deepEqual(statusUpdates, [{ userId: 7, eventId: 1, status: "published" }]);
@@ -292,7 +305,7 @@ test("publish returns 404 when event is not owned by organizer", async () => {
   };
 
   await assertHttpError(
-    () => new PublishEventUseCase(events as never).execute(7, 1),
+    () => new PublishEventUseCase(events as never, fakePublicUrl).execute(7, 1),
     { status: 404, code: "EVENT_NOT_FOUND" },
   );
 });
@@ -302,7 +315,7 @@ test("publish returns 422 for invalid event states", async () => {
     () =>
       new PublishEventUseCase({
         findByOrganizerAndId: async () => event({ status: "cancelled" }),
-      } as never).execute(7, 1),
+      } as never, fakePublicUrl).execute(7, 1),
     { status: 422, code: "EVENT_CANCELLED" },
   );
 
@@ -310,7 +323,7 @@ test("publish returns 422 for invalid event states", async () => {
     () =>
       new PublishEventUseCase({
         findByOrganizerAndId: async () => event({ status: "published" }),
-      } as never).execute(7, 1),
+      } as never, fakePublicUrl).execute(7, 1),
     { status: 422, code: "EVENT_ALREADY_PUBLISHED" },
   );
 
@@ -318,7 +331,7 @@ test("publish returns 422 for invalid event states", async () => {
     () =>
       new PublishEventUseCase({
         findByOrganizerAndId: async () => event({ starts_at: pastIso(2), ends_at: pastIso(1) }),
-      } as never).execute(7, 1),
+      } as never, fakePublicUrl).execute(7, 1),
     { status: 422, code: "EVENT_ENDED" },
   );
 });
@@ -328,7 +341,7 @@ test("publish requires location for in-person events and at least one type", asy
     () =>
       new PublishEventUseCase({
         findByOrganizerAndId: async () => event({ is_remote: false, location_name: "" }),
-      } as never).execute(7, 1),
+      } as never, fakePublicUrl).execute(7, 1),
     { status: 422, code: "EVENT_LOCATION_REQUIRED" },
   );
 
@@ -337,7 +350,7 @@ test("publish requires location for in-person events and at least one type", asy
       new PublishEventUseCase({
         findByOrganizerAndId: async () => event(),
         findTypesForEvent: async () => [],
-      } as never).execute(7, 1),
+      } as never, fakePublicUrl).execute(7, 1),
     { status: 422, code: "EVENT_TYPE_REQUIRED" },
   );
 });
@@ -360,7 +373,7 @@ test("delete removes draft events without registrations", async () => {
     countByEvent: async () => 0,
   };
 
-  await new DeleteEventUseCase(events as never, registrations as never).execute(7, 1);
+  await new DeleteEventUseCase(events as never, registrations as never, fakeStorage()).execute(7, 1);
 
   assert.equal(deleted, true);
   assert.equal(cancelled, false);
@@ -384,7 +397,7 @@ test("delete cancels published events instead of deleting", async () => {
     countByEvent: async () => 0,
   };
 
-  await new DeleteEventUseCase(events as never, registrations as never).execute(7, 1);
+  await new DeleteEventUseCase(events as never, registrations as never, fakeStorage()).execute(7, 1);
 
   assert.equal(deleted, false);
   assert.equal(cancelledStatus, "cancelled");
@@ -399,7 +412,7 @@ test("delete returns 422 for ended events", async () => {
   };
 
   await assertHttpError(
-    () => new DeleteEventUseCase(events as never, registrations as never).execute(7, 1),
+    () => new DeleteEventUseCase(events as never, registrations as never, fakeStorage()).execute(7, 1),
     { status: 422, code: "EVENT_ENDED" },
   );
 });
