@@ -3,19 +3,6 @@ import { z } from "../docs/zod-openapi";
 import { nullableProfilePhoneSchema } from "./phone.contract";
 import type { SharedBoundaryComponents } from "./shared.contract";
 
-const httpUrlSchema = z.preprocess(
-  (value) => (typeof value === "string" ? value.trim() : value),
-  z
-    .url({ error: "URL inválida" })
-    .max(512, { error: "A URL deve ter no máximo 512 caracteres" })
-    .refine(
-      (value) => value.startsWith("http://") || value.startsWith("https://"),
-      {
-        error: "A URL deve começar com http:// ou https://",
-      },
-    ),
-);
-
 const unsignedIntegerMax = 4_294_967_295;
 const textColumnMaxLength = 65_535;
 
@@ -76,33 +63,19 @@ function nullableOptionalTrimmedString(maxLength: number, fieldLabel: string) {
   );
 }
 
-function nullableOptionalHttpUrlSchema(fieldLabel: string) {
-  return z.preprocess(
-    (value) => {
-      if (value === null || value === undefined || typeof value !== "string") {
-        return value;
-      }
-
-      const trimmed = value.trim();
-      return trimmed.length > 0 ? trimmed : null;
-    },
-    httpUrlSchema
-      .nullable()
-      .optional()
-      .refine((value) => value === null || value === undefined || value.length <= 512, {
-        error: `O campo ${fieldLabel} deve ter no máximo 512 caracteres`,
-      }),
-  );
-}
-
-function lookupCodeArraySchema(fieldLabel: string, options: { required: boolean }) {
+function lookupCodeArraySchema(
+  fieldLabel: string,
+  options: { required: boolean },
+) {
   const arraySchema = z
     .array(
       z
         .string({ error: `Cada código de ${fieldLabel} deve ser texto` })
         .trim()
         .min(1, { error: `Cada código de ${fieldLabel} deve ser informado` })
-        .max(64, { error: `Cada código de ${fieldLabel} deve ter no máximo 64 caracteres` }),
+        .max(64, {
+          error: `Cada código de ${fieldLabel} deve ter no máximo 64 caracteres`,
+        }),
       { error: `O campo ${fieldLabel} deve ser uma lista` },
     )
     .superRefine((value, ctx) => {
@@ -155,7 +128,6 @@ export const meProfilePatchBodySchema = z
     state: profileStateSchema,
     bio: nullableTrimmedString(5000, "bio"),
     publicOrganizationName: nullableTrimmedString(255, "organização pública"),
-    avatarUrl: nullableOptionalHttpUrlSchema("URL do avatar"),
   })
   .superRefine((value, ctx) => {
     if (Object.keys(value).length > 0) {
@@ -206,7 +178,11 @@ export const meEventsFilterQuerySchema = z.object({
   filter: z
     .preprocess(
       (value) => {
-        if (value === null || value === undefined || typeof value !== "string") {
+        if (
+          value === null ||
+          value === undefined ||
+          typeof value !== "string"
+        ) {
           return value;
         }
 
@@ -228,8 +204,14 @@ export const createEventBodySchema = z
   .object({
     title: requiredTrimmedString(255, "título"),
     summary: requiredTrimmedString(textColumnMaxLength, "resumo"),
-    description: nullableOptionalTrimmedString(textColumnMaxLength, "descrição"),
-    rulesTerms: nullableOptionalTrimmedString(textColumnMaxLength, "termos e regras"),
+    description: nullableOptionalTrimmedString(
+      textColumnMaxLength,
+      "descrição",
+    ),
+    rulesTerms: nullableOptionalTrimmedString(
+      textColumnMaxLength,
+      "termos e regras",
+    ),
     startsAt: z.iso.datetime({
       error: "A data de início deve estar em formato ISO 8601",
     }),
@@ -250,11 +232,13 @@ export const createEventBodySchema = z
       })
       .nullable()
       .optional(),
-    highlightSkill: nullableOptionalTrimmedString(255, "habilidade em destaque"),
+    highlightSkill: nullableOptionalTrimmedString(
+      255,
+      "habilidade em destaque",
+    ),
     typeCodes: lookupCodeArraySchema("tipos de evento", { required: true }),
     requirementCodes: lookupCodeArraySchema("requisitos", { required: false }),
     publish: z.boolean({ error: "Informe se o evento deve ser publicado" }),
-    coverImageUrl: nullableOptionalHttpUrlSchema("URL da imagem de capa"),
   })
   .superRefine((value, ctx) => {
     if (!value.endsAt) return;
@@ -273,16 +257,20 @@ export const patchEventBodySchema = z
   .object({
     title: requiredTrimmedString(255, "título").optional(),
     summary: requiredTrimmedString(textColumnMaxLength, "resumo").optional(),
-    description: nullableOptionalTrimmedString(textColumnMaxLength, "descrição"),
-    rulesTerms: nullableOptionalTrimmedString(textColumnMaxLength, "termos e regras"),
-    startsAt: z
-      .iso
+    description: nullableOptionalTrimmedString(
+      textColumnMaxLength,
+      "descrição",
+    ),
+    rulesTerms: nullableOptionalTrimmedString(
+      textColumnMaxLength,
+      "termos e regras",
+    ),
+    startsAt: z.iso
       .datetime({
         error: "A data de início deve estar em formato ISO 8601",
       })
       .optional(),
-    endsAt: z
-      .iso
+    endsAt: z.iso
       .datetime({
         error: "A data de término deve estar em formato ISO 8601",
       })
@@ -299,11 +287,19 @@ export const patchEventBodySchema = z
       })
       .nullable()
       .optional(),
-    highlightSkill: nullableOptionalTrimmedString(255, "habilidade em destaque"),
-    coverImageUrl: nullableOptionalHttpUrlSchema("URL da imagem de capa"),
-    typeCodes: lookupCodeArraySchema("tipos de evento", { required: true }).optional(),
-    requirementCodes: lookupCodeArraySchema("requisitos", { required: false }).optional(),
-    publish: z.boolean({ error: "Informe se o evento deve ser publicado" }).optional(),
+    highlightSkill: nullableOptionalTrimmedString(
+      255,
+      "habilidade em destaque",
+    ),
+    typeCodes: lookupCodeArraySchema("tipos de evento", {
+      required: true,
+    }).optional(),
+    requirementCodes: lookupCodeArraySchema("requisitos", {
+      required: false,
+    }).optional(),
+    publish: z
+      .boolean({ error: "Informe se o evento deve ser publicado" })
+      .optional(),
   })
   .superRefine((value, ctx) => {
     if (Object.keys(value).length === 0) {
@@ -333,10 +329,9 @@ export const patchEventBodySchema = z
   });
 
 export const updateOrganizerRegistrationBodySchema = z.object({
-  status: z
-    .enum(["pending", "confirmed", "cancelled"], {
-      error: "O status deve ser pending, confirmed ou cancelled",
-    }),
+  status: z.enum(["pending", "confirmed", "cancelled"], {
+    error: "O status deve ser pending, confirmed ou cancelled",
+  }),
 });
 
 export const meEventIdParamsSchema = z.object({
@@ -382,8 +377,7 @@ export function registerMeBoundaryContract(
     "MyRegistrationItem",
     z.object({
       id: z.number().int(),
-      status: z
-        .enum(["pending", "confirmed", "cancelled"]),
+      status: z.enum(["pending", "confirmed", "cancelled"]),
       event: z.object({
         id: z.number().int(),
         title: z.string(),
@@ -423,14 +417,13 @@ export function registerMeBoundaryContract(
         z.object({
           id: z.string(),
           title: z.string(),
-          filter: z
-            .enum(["upcoming", "past", "ongoing"]),
+          filter: z.enum(["upcoming", "past", "ongoing"]),
           statusLabel: z.string(),
           description: z.string(),
+          coverImageUrl: z.url().nullable(),
           imageClassName: z.string(),
           startsAt: z.iso.datetime(),
-          status: z
-            .enum(["draft", "published", "cancelled"]),
+          status: z.enum(["draft", "published", "cancelled"]),
         }),
       ),
     }),
@@ -443,38 +436,28 @@ export function registerMeBoundaryContract(
       organizer_id: z.number().int(),
       title: z.string(),
       summary: z.string(),
-      description: z
-        .string()
-        .nullable(),
-      rules_terms: z
-        .string()
-        .nullable(),
+      description: z.string().nullable(),
+      rules_terms: z.string().nullable(),
       starts_at: z.iso.datetime(),
       ends_at: z.iso.datetime().nullable(),
-      location_name: z
-        .string()
-        .nullable(),
+      location_name: z.string().nullable(),
       is_remote: z.boolean(),
       capacity: z.number().int().nullable(),
       cover_image_url: z.url().nullable(),
-      highlight_skill: z
-        .string()
-        .nullable(),
-      status: z
-        .enum(["draft", "published", "cancelled"]),
+      highlight_skill: z.string().nullable(),
+      status: z.enum(["draft", "published", "cancelled"]),
       created_at: z.iso.datetime().optional(),
       updated_at: z.iso.datetime().optional(),
       types: z.array(shared.lookupOptionSchema),
       requirements: z.array(shared.lookupOptionSchema),
-      computedStatus: z
-        .enum([
-          "draft",
-          "published",
-          "cancelled",
-          "upcoming",
-          "ongoing",
-          "past",
-        ]),
+      computedStatus: z.enum([
+        "draft",
+        "published",
+        "cancelled",
+        "upcoming",
+        "ongoing",
+        "past",
+      ]),
     }),
   );
 
@@ -490,8 +473,7 @@ export function registerMeBoundaryContract(
           phone: z.string(),
           cityUf: z.string(),
           registrationDate: z.iso.datetime(),
-          status: z
-            .enum(["pending", "confirmed", "cancelled"]),
+          status: z.enum(["pending", "confirmed", "cancelled"]),
         }),
       ),
     }),
@@ -501,8 +483,7 @@ export function registerMeBoundaryContract(
     "UpdateRegistrationStatusResponse",
     z.object({
       id: z.number().int(),
-      status: z
-        .enum(["pending", "confirmed", "cancelled"]),
+      status: z.enum(["pending", "confirmed", "cancelled"]),
     }),
   );
 
@@ -523,6 +504,154 @@ export function registerMeBoundaryContract(
       },
       "404": {
         description: "Usuário não encontrado.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      "500": {
+        description: "Erro interno.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+    },
+  });
+
+  const uploadRequestBody = {
+    required: true,
+    content: {
+      "multipart/form-data": {
+        schema: z.object({
+          file: z
+            .string()
+            .openapi({ type: "string", format: "binary" })
+            .describe("Imagem JPEG, PNG ou WebP"),
+        }),
+      },
+    },
+  };
+
+  const uploadErrorResponses = {
+    "400": {
+      description:
+        "Arquivo ausente, corpo multipart malformado, campo inesperado, campos além do arquivo ou, nas rotas com parâmetro, um id de rota inválido.",
+      content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+    },
+    "401": {
+      description: "Autenticação necessária.",
+      content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+    },
+    "413": {
+      description: "Imagem acima do tamanho máximo permitido.",
+      content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+    },
+    "415": {
+      description:
+        "Os bytes enviados não são de uma imagem JPEG, PNG ou WebP. A extensão e o Content-Type declarados são ignorados.",
+      content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+    },
+    "429": {
+      description: "Muitos envios de imagem em sequência.",
+      content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+    },
+    "500": {
+      description: "Erro interno.",
+      content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+    },
+  };
+
+  registry.registerPath({
+    method: "post",
+    path: "/me/avatar",
+    tags: ["me"],
+    summary: "Envia a foto de perfil do usuário autenticado.",
+    description:
+      "Substitui a foto atual. A imagem anterior é removida do armazenamento.",
+    security: [shared.bearerAuthSecurity],
+    request: { body: uploadRequestBody },
+    responses: {
+      "200": {
+        description: "Perfil atualizado com a nova foto.",
+        content: { "application/json": { schema: shared.userSchema } },
+      },
+      "404": {
+        description:
+          "Usuário do token não existe mais — acontece com um token ainda dentro da validade após o banco ser recriado.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      ...uploadErrorResponses,
+    },
+  });
+
+  registry.registerPath({
+    method: "delete",
+    path: "/me/avatar",
+    tags: ["me"],
+    summary: "Remove a foto de perfil do usuário autenticado.",
+    security: [shared.bearerAuthSecurity],
+    responses: {
+      "200": {
+        description: "Perfil atualizado sem foto.",
+        content: { "application/json": { schema: shared.userSchema } },
+      },
+      "401": {
+        description: "Autenticação necessária.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      "404": {
+        description: "Usuário não encontrado.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      "500": {
+        description: "Erro interno.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+    },
+  });
+
+  registry.registerPath({
+    method: "post",
+    path: "/me/events/{eventId}/cover",
+    tags: ["me"],
+    summary: "Envia a imagem de capa de um evento do organizador autenticado.",
+    description:
+      "Substitui a capa atual. A imagem anterior é removida do armazenamento. Responde 404 tanto para evento inexistente quanto para evento de outro organizador.",
+    security: [shared.bearerAuthSecurity],
+    request: {
+      params: z.object({ eventId: shared.eventIdParam }),
+      body: uploadRequestBody,
+    },
+    responses: {
+      "200": {
+        description: "Evento atualizado com a nova capa.",
+        content: { "application/json": { schema: organizerEventSchema } },
+      },
+      "404": {
+        description: "Evento não encontrado ou de outro organizador.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      ...uploadErrorResponses,
+    },
+  });
+
+  registry.registerPath({
+    method: "delete",
+    path: "/me/events/{eventId}/cover",
+    tags: ["me"],
+    summary: "Remove a imagem de capa de um evento do organizador autenticado.",
+    security: [shared.bearerAuthSecurity],
+    request: { params: z.object({ eventId: shared.eventIdParam }) },
+    responses: {
+      "200": {
+        description: "Evento atualizado sem capa.",
+        content: { "application/json": { schema: organizerEventSchema } },
+      },
+      "400": {
+        description: "Id de rota inválido.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      "401": {
+        description: "Autenticação necessária.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      "404": {
+        description: "Evento não encontrado ou de outro organizador.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "500": {
@@ -745,7 +874,8 @@ export function registerMeBoundaryContract(
         content: { "application/json": { schema: organizerEventSchema } },
       },
       "400": {
-        description: "Payload inválido, códigos de catálogo inválidos ou datas inválidas.",
+        description:
+          "Payload inválido, códigos de catálogo inválidos ou datas inválidas.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "401": {
@@ -836,7 +966,8 @@ export function registerMeBoundaryContract(
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "422": {
-        description: "Status da inscrição não pode ser alterado no estado atual.",
+        description:
+          "Status da inscrição não pode ser alterado no estado atual.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "500": {

@@ -1,5 +1,6 @@
 import bcrypt from "bcrypt";
 import { toUserPublicDto } from "../../models/user.model";
+import type { PublicUrlResolver } from "../../services/storage";
 import type { PasswordResetRepository } from "../../repositories/password-reset.repository";
 import type { RefreshTokenRepository } from "../../repositories/refresh-token.repository";
 import type { UserRepository } from "../../repositories/user.repository";
@@ -28,6 +29,7 @@ export class RegisterUserUseCase {
   constructor(
     private readonly users: UserRepository,
     private readonly tokens: AuthTokensHelper,
+      private readonly resolvePublicUrl: PublicUrlResolver,
   ) {}
 
   async execute(input: {
@@ -57,7 +59,7 @@ export class RegisterUserUseCase {
     const pair = await this.tokens.createPair(userId);
     const user = await this.users.findById(userId);
     if (!user) throw new HttpError(500, "INTERNAL", "Falha ao criar usuário");
-    return { ...pair, user: toUserPublicDto(user) };
+    return { ...pair, user: toUserPublicDto(user, this.resolvePublicUrl) };
   }
 }
 
@@ -65,6 +67,7 @@ export class LoginUserUseCase {
   constructor(
     private readonly users: UserRepository,
     private readonly tokens: AuthTokensHelper,
+    private readonly resolvePublicUrl: PublicUrlResolver,
   ) {}
 
   async execute(input: { email: string; password: string }) {
@@ -86,7 +89,7 @@ export class LoginUserUseCase {
 
     const pair = await this.tokens.createPair(row.id);
     const { password_hash: _, ...publicFields } = row;
-    return { ...pair, user: toUserPublicDto(publicFields) };
+    return { ...pair, user: toUserPublicDto(publicFields, this.resolvePublicUrl) };
   }
 }
 

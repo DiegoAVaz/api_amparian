@@ -28,7 +28,10 @@ export type UserPublicDto = {
   avatarUrl: string | null;
 };
 
-export function toUserPublicDto(row: UserPublicFields): UserPublicDto {
+export function toUserPublicDto(
+  row: UserPublicFields,
+  resolvePublicUrl: (value: string | null) => string | null,
+): UserPublicDto {
   return {
     id: row.id,
     email: row.email,
@@ -39,6 +42,6 @@ export function toUserPublicDto(row: UserPublicFields): UserPublicDto {
     bio: row.bio,
     plan: row.plan,
     publicOrganizationName: row.public_organization_name,
-    avatarUrl: row.avatar_url,
+    avatarUrl: resolvePublicUrl(row.avatar_url),
   };
 }

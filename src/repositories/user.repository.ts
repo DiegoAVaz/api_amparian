@@ -23,7 +23,9 @@ export class UserRepository {
     return row as UserPublicFields | undefined;
   }
 
-  async findByEmailWithPassword(email: string): Promise<UserRecord | undefined> {
+  async findByEmailWithPassword(
+    email: string,
+  ): Promise<UserRecord | undefined> {
     return this.db<UserRecord>("users").where({ email }).first();
   }
 
@@ -46,8 +48,15 @@ export class UserRepository {
     await this.db("users").where({ id: userId }).update({ password_hash });
   }
 
-  async updateProfile(userId: number, row: Record<string, unknown>): Promise<void> {
+  async updateProfile(
+    userId: number,
+    row: Record<string, unknown>,
+  ): Promise<void> {
     if (Object.keys(row).length === 0) return;
     await this.db("users").where({ id: userId }).update(row);
+  }
+
+  async setAvatar(userId: number, value: string | null): Promise<number> {
+    return this.db("users").where({ id: userId }).update({ avatar_url: value });
   }
 }
