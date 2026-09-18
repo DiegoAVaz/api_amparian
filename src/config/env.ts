@@ -20,6 +20,10 @@ function parseDurationMs(value: string): number | null {
   return typeof parsed === "number" && Number.isFinite(parsed) ? parsed : null;
 }
 
+function emptyToUndefined(value: unknown): unknown {
+  return typeof value === "string" && value.trim() === "" ? undefined : value;
+}
+
 const passwordResetDurationSchema = z.string().refine(
   (value) => {
     const parsed = parseDurationMs(value);
@@ -86,6 +90,68 @@ const schema = z
     MAIL_USER: z.string().optional(),
     MAIL_PASSWORD: z.string().optional(),
     MAIL_FROM: z.string().default(DEFAULT_MAIL_FROM),
+    AZURE_STORAGE_CONNECTION_STRING: z.preprocess(
+      emptyToUndefined,
+      z
+        .string({
+          error:
+            "AZURE_STORAGE_CONNECTION_STRING é obrigatório em todo ambiente — copie o valor inteiro no portal Azure, na storage account, em Access keys",
+        })
+        .refine(
+          (value) => {
+            const temEndpoint =
+              value.includes("BlobEndpoint=") ||
+              (value.includes("DefaultEndpointsProtocol=") &&
+                value.includes("AccountName="));
+            const temCredencial =
+              value.includes("AccountKey=") ||
+              value.includes("SharedAccessSignature=");
+            return temEndpoint && temCredencial;
+          },
+          {
+            error:
+              "AZURE_STORAGE_CONNECTION_STRING não parece uma connection string do Azure — copie o valor inteiro em Access keys, não apenas a chave",
+          },
+        ),
+    ),
+    AZURE_STORAGE_CONTAINER: z.preprocess(
+      emptyToUndefined,
+      z
+        .string()
+        .min(3, {
+          error: "AZURE_STORAGE_CONTAINER deve ter no mínimo 3 caracteres",
+        })
+        .max(63, {
+          error: "AZURE_STORAGE_CONTAINER deve ter no máximo 63 caracteres",
+        })
+        .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, {
+          error:
+            "AZURE_STORAGE_CONTAINER deve usar apenas minúsculas, números e hífen, começar e terminar em letra ou número, e não pode ter hífens consecutivos",
+        })
+        .default("amparian"),
+    ),
+    STORAGE_PUBLIC_BASE_URL: z.preprocess(
+      emptyToUndefined,
+      z
+        .url({ error: "STORAGE_PUBLIC_BASE_URL deve ser uma URL válida" })
+        .transform((url) => url.replace(/\/+$/, ""))
+        .optional(),
+    ),
+    UPLOAD_MAX_BYTES: z.preprocess(
+      emptyToUndefined,
+      z.coerce
+        .number()
+        .int()
+        .min(100_000, {
+          error:
+            "UPLOAD_MAX_BYTES precisa ser de pelo menos 100000: abaixo disso nenhuma imagem de capa ou avatar real seria aceita",
+        })
+        .max(4_300_000, {
+          error:
+            "UPLOAD_MAX_BYTES é o tamanho máximo do arquivo e não pode passar de 4300000: o corpo da requisição multipart soma boundary e cabeçalhos por cima, e precisa caber no teto de 4,5 MB da função serverless na Vercel",
+        })
+        .default(4_000_000),
+    ),
   })
   .superRefine((value, ctx) => {
     if (value.NODE_ENV === "development") return;

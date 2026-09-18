@@ -5,7 +5,7 @@ import {
   ListPublicEventsUseCase,
   RegisterForEventUseCase,
 } from "../../src/use-cases/events/public-event.use-cases";
-import { assertHttpError, futureIso, pastIso } from "../helpers";
+import { assertHttpError, futureIso, pastIso, fakePublicUrl } from "../helpers";
 
 function event(overrides: Record<string, unknown> = {}) {
   return {
@@ -49,7 +49,7 @@ test("lists public published events with pagination metadata", async () => {
     }),
   };
 
-  const result = await new ListPublicEventsUseCase(events as never).execute({
+  const result = await new ListPublicEventsUseCase(events as never, fakePublicUrl).execute({
     q: "educacao",
     page: 2,
     limit: 10,
@@ -97,7 +97,7 @@ test("gets public event detail with lookups and organizer display name", async (
     findRequirementsForEvent: async () => [{ code: "adult", label: "Maior de idade" }],
   };
 
-  const result = await new GetPublicEventUseCase(events as never).execute(1);
+  const result = await new GetPublicEventUseCase(events as never, fakePublicUrl).execute(1);
 
   assert.equal(result.id, 1);
   assert.equal(result.org, "Maria");
@@ -115,7 +115,7 @@ test("get public event returns 404 when published event is not found", async () 
   };
 
   await assertHttpError(
-    () => new GetPublicEventUseCase(events as never).execute(999),
+    () => new GetPublicEventUseCase(events as never, fakePublicUrl).execute(999),
     { status: 404, code: "EVENT_NOT_FOUND" },
   );
 });
@@ -217,4 +217,38 @@ test("returns 400 when responsibility terms are not accepted", async () => {
     () => useCase.execute(1, 9, { agreedResponsibility: false }),
     { status: 400, code: "TERMS_REQUIRED" },
   );
+});
+
+// A coluna reaproveitada guarda dois tipos de valor. O caso da URL legada já é
+// coberto acima; este cobre o que a feature de upload realmente grava — sem
+// ele, apagar a chamada ao resolvedor deixaria a suíte inteira verde.
+test("uma chave de blob vira URL pública, e imageKey devolve a chave", async () => {
+  const startsAt = futureIso(3);
+  const events = {
+    findPublishedListRow: async () => ({
+      rows: [
+        {
+          id: 7,
+          title: "Com capa enviada",
+          summary: "Resumo",
+          starts_at: startsAt,
+          location_name: null,
+          is_remote: 0,
+          capacity: null,
+          cover_image_url: "events/7/cover-abc.png",
+          public_organization_name: null,
+          organizer_name: "Organizador",
+        },
+      ],
+      total: 1,
+    }),
+  };
+
+  const { data } = await new ListPublicEventsUseCase(
+    events as never,
+    fakePublicUrl,
+  ).execute({ page: 1, limit: 10 });
+
+  assert.equal(data[0].coverImageUrl, "https://cdn.teste/events/7/cover-abc.png");
+  assert.equal(data[0].imageKey, "events/7/cover-abc.png");
 });
