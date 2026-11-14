@@ -74,6 +74,7 @@ export class EventRepository {
         "e.location_name",
         "e.is_remote",
         "e.capacity",
+        "e.workload_hours",
         "e.cover_image_url",
         "e.highlight_skill",
         "e.status",
@@ -152,6 +153,7 @@ export class EventRepository {
       location_name: string | null;
       is_remote: boolean;
       capacity: number | null;
+      workload_hours: number | null;
       highlight_skill: string | null;
       status: EventStatus;
     },

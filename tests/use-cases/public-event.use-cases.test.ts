@@ -20,6 +20,7 @@ function event(overrides: Record<string, unknown> = {}) {
     location_name: null,
     is_remote: true,
     capacity: null,
+    workload_hours: null,
     cover_image_url: null,
     highlight_skill: null,
     status: "published",

@@ -23,6 +23,7 @@ type DemoEventInput = {
   locationName: string;
   isRemote: boolean;
   capacity: number | null;
+  workloadHours: number;
   highlightSkill: string;
   coverImageUrl: string | null;
   typeCodes: string[];
@@ -89,6 +90,7 @@ const DEMO_EVENTS: DemoEventInput[] = [
     locationName: "Praia de Icaraí, Niterói",
     isRemote: false,
     capacity: 30,
+    workloadHours: 3.5,
     highlightSkill: "Consciência ambiental",
     coverImageUrl: null,
     typeCodes: ["limpeza", "educacao"],
@@ -107,6 +109,7 @@ const DEMO_EVENTS: DemoEventInput[] = [
     locationName: "Centro Comunitário Futuro Coletivo",
     isRemote: false,
     capacity: 20,
+    workloadHours: 3,
     highlightSkill: "Mentoria",
     coverImageUrl: null,
     typeCodes: ["educacao", "trabalho_administrativo"],
@@ -125,6 +128,7 @@ const DEMO_EVENTS: DemoEventInput[] = [
     locationName: "Google Meet",
     isRemote: true,
     capacity: 15,
+    workloadHours: 2,
     highlightSkill: "Comunicação",
     coverImageUrl: null,
     typeCodes: ["arrecadacao", "venda_marketing"],
@@ -186,6 +190,7 @@ async function main() {
         location_name: event.locationName,
         is_remote: event.isRemote,
         capacity: event.capacity,
+        workload_hours: event.workloadHours,
         cover_image_url: event.coverImageUrl,
         highlight_skill: event.highlightSkill,
         status: "published",

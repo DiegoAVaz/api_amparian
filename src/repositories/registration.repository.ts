@@ -50,10 +50,14 @@ export class RegistrationRepository {
       phone: string | null;
       city: string | null;
       state: string | null;
+      attendance_status: string | null;
     }>
   > {
+    // `leftJoin` porque a maioria dos inscritos ainda não tem presença lançada; a falta da linha
+    // vira `attendance_status` nulo, e não some com o inscrito da lista.
     return this.db("event_registrations as er")
       .join("users as u", "er.user_id", "u.id")
+      .leftJoin("event_attendances as ea", "ea.registration_id", "er.id")
       .where("er.event_id", eventId)
       .orderBy("er.created_at", "asc")
       .orderBy("er.id", "asc")
@@ -67,6 +71,7 @@ export class RegistrationRepository {
         "u.phone",
         "u.city",
         "u.state",
+        "ea.status as attendance_status",
       );
   }
 
@@ -79,6 +84,20 @@ export class RegistrationRepository {
       .where({ id: registrationId, event_id: eventId })
       .forUpdate()
       .first();
+  }
+
+  // Inscrições do evento entre os ids pedidos, travadas até o fim da transação: o status não
+  // pode mudar entre a conferência ("está confirmada?") e a gravação da presença.
+  async findByEventAndIdsForUpdate(
+    eventId: number,
+    registrationIds: number[],
+    trx: Knex,
+  ): Promise<EventRegistrationRecord[]> {
+    if (registrationIds.length === 0) return [];
+    return trx<EventRegistrationRecord>("event_registrations")
+      .where({ event_id: eventId })
+      .whereIn("id", registrationIds)
+      .forUpdate();
   }
 
   async updateStatus(
@@ -166,24 +185,5 @@ export class RegistrationRepository {
       .whereBetween("e.starts_at", [start, end])
       .select("e.id", "e.title", "e.starts_at", "u.public_organization_name", "u.name as organizer_name")
       .orderBy("e.starts_at", "asc");
-  }
-
-  async countConfirmedRegistrationsByUser(userId: number): Promise<number> {
-    const countRows = await this.db("event_registrations")
-      .where({ user_id: userId, status: "confirmed" })
-      .count("* as count");
-    return firstCount(countRows);
-  }
-
-  async countDistinctCausesSupported(userId: number): Promise<number> {
-    const raw = await this.db.raw(
-      `SELECT COUNT(DISTINCT e.organizer_id) AS c
-       FROM event_registrations er
-       INNER JOIN events e ON e.id = er.event_id
-       WHERE er.user_id = ? AND er.status = 'confirmed'`,
-      [userId],
-    );
-    const causeRows = (raw as unknown as [Array<{ c: string | number }>, unknown])[0];
-    return Number(causeRows?.[0]?.c ?? 0);
   }
 }

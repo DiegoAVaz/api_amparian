@@ -12,6 +12,7 @@ import {
   classifyTimeFilter,
   computeEventStatus,
   organizerStatusLabel,
+  parseWorkloadHours,
 } from "../../utils/event-helpers";
 import { HttpError } from "../../utils/http-error";
 
@@ -33,6 +34,18 @@ function ensureValidEventDates(startsAt: Date, endsAt: Date | null): void {
 
 function isBlank(value: unknown): boolean {
   return typeof value !== "string" || value.trim().length === 0;
+}
+
+// RC-03: um evento só é publicado com carga horária, porque é ela que vai impressa no certificado
+// de quem estiver presente. Rascunho pode ficar sem.
+function ensureWorkloadForPublish(workloadHours: number | null): void {
+  if (workloadHours === null) {
+    throw new HttpError(
+      422,
+      "EVENT_WORKLOAD_REQUIRED",
+      "Informe a carga horária do evento antes de publicar",
+    );
+  }
 }
 
 export class ListMyEventsUseCase {
@@ -97,6 +110,8 @@ export class GetOrganizerEventUseCase {
     return {
       ...row,
       id: Number(row.id),
+      // O espalhamento traria o DECIMAL como texto ("4.50"); o contrato promete número.
+      workload_hours: parseWorkloadHours(row.workload_hours),
       cover_image_url: this.resolvePublicUrl(
         row.cover_image_url as string | null,
       ),
@@ -126,6 +141,7 @@ export class CreateEventUseCase {
       locationName?: string | null;
       isRemote: boolean;
       capacity?: number | null;
+      workloadHours?: number | null;
       highlightSkill?: string | null;
       typeCodes: string[];
       requirementCodes: string[];
@@ -136,6 +152,7 @@ export class CreateEventUseCase {
     const startsAt = new Date(body.startsAt);
     const endsAt = body.endsAt ? new Date(body.endsAt) : null;
     ensureValidEventDates(startsAt, endsAt);
+    if (body.publish) ensureWorkloadForPublish(body.workloadHours ?? null);
 
     const typeIds = await this.lookups.findEventTypeIdsByCodes(body.typeCodes);
     if (typeIds.length !== body.typeCodes.length) {
@@ -177,6 +194,7 @@ export class CreateEventUseCase {
         location_name: body.locationName ?? null,
         is_remote: body.isRemote,
         capacity: body.capacity ?? null,
+        workload_hours: body.workloadHours ?? null,
         highlight_skill: body.highlightSkill ?? null,
         status,
       });
@@ -220,6 +238,7 @@ export class UpdateEventUseCase {
       locationName: string | null;
       isRemote: boolean;
       capacity: number | null;
+      workloadHours: number | null;
       highlightSkill: string | null;
       typeCodes: string[];
       requirementCodes: string[];
@@ -229,6 +248,22 @@ export class UpdateEventUseCase {
     const existing = await this.events.findByOrganizerAndId(userId, eventId);
     if (!existing)
       throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
+
+    // RC-03 nos dois sentidos em que a edição pode ferir a regra: publicar um rascunho sem carga
+    // horária, ou apagar a carga horária de um evento publicado. Evento publicado antes desta regra
+    // e ainda sem o campo continua editável no resto — só não emite certificado até ganhar um valor.
+    const willBePublished =
+      patch.publish !== undefined ? patch.publish : existing.status === "published";
+    const nextWorkload =
+      patch.workloadHours !== undefined
+        ? patch.workloadHours
+        : parseWorkloadHours(existing.workload_hours);
+    if (
+      willBePublished &&
+      (existing.status !== "published" || patch.workloadHours === null)
+    ) {
+      ensureWorkloadForPublish(nextWorkload);
+    }
     const nextStartsAt =
       patch.startsAt !== undefined
         ? new Date(patch.startsAt)
@@ -257,6 +292,8 @@ export class UpdateEventUseCase {
         row.location_name = patch.locationName;
       if (patch.isRemote !== undefined) row.is_remote = patch.isRemote;
       if (patch.capacity !== undefined) row.capacity = patch.capacity;
+      if (patch.workloadHours !== undefined)
+        row.workload_hours = patch.workloadHours;
       if (patch.highlightSkill !== undefined)
         row.highlight_skill = patch.highlightSkill;
       if (patch.publish !== undefined)
@@ -487,6 +524,8 @@ export class PublishEventUseCase {
       );
     }
 
+    ensureWorkloadForPublish(parseWorkloadHours(event.workload_hours));
+
     const n = await this.events.setStatus(userId, eventId, "published");
     if (!n)
       throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
@@ -520,6 +559,13 @@ export class ListOrganizerRegistrationsUseCase {
         r.status === "cancelled"
           ? r.status
           : "pending";
+      // Presença só vale para inscrição confirmada (RC-02): a de uma inscrição cancelada depois
+      // continua gravada, mas não aparece para o organizador.
+      const attendance =
+        status === "confirmed" &&
+        (r.attendance_status === "present" || r.attendance_status === "absent")
+          ? r.attendance_status
+          : null;
 
       return {
         id: String(Number(r.id)),
@@ -530,6 +576,7 @@ export class ListOrganizerRegistrationsUseCase {
         cityUf,
         registrationDate: new Date(r.created_at as string).toISOString(),
         status,
+        attendance,
       };
     });
 

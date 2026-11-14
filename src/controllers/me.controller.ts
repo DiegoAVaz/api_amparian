@@ -9,6 +9,7 @@ import {
   meRegistrationIdParamsSchema,
   meRegistrationsQuerySchema,
   patchEventBodySchema,
+  recordAttendanceBodySchema,
   updateOrganizerRegistrationBodySchema,
 } from "../contracts/me.contract";
 import { getContainer } from "../di/container";
@@ -109,6 +110,7 @@ export const meController = {
       locationName: body.locationName ?? null,
       isRemote: body.isRemote,
       capacity: body.capacity ?? null,
+      workloadHours: body.workloadHours ?? null,
       highlightSkill: body.highlightSkill ?? null,
       typeCodes: body.typeCodes,
       requirementCodes: body.requirementCodes,
@@ -139,6 +141,17 @@ export const meController = {
       body.status,
     );
     res.json(result);
+  }),
+
+  recordAttendance: wrapAsync(async (req: Request, res: Response) => {
+    const { eventId } = parseParams(meEventIdParamsSchema, req.params);
+    const body = parseBody(recordAttendanceBodySchema, req.body);
+    const data = await getContainer().recordAttendance.execute(
+      req.userId!,
+      eventId,
+      body.items,
+    );
+    res.json({ data });
   }),
 
   publishEvent: wrapAsync(async (req: Request, res: Response) => {
@@ -175,6 +188,7 @@ export const meController = {
         locationName: body.locationName,
         isRemote: body.isRemote,
         capacity: body.capacity,
+        workloadHours: body.workloadHours,
         highlightSkill: body.highlightSkill,
         typeCodes: body.typeCodes,
         requirementCodes: body.requirementCodes,

@@ -22,6 +22,16 @@ export function organizerStatusLabel(computed: ComputedEventStatus): "Ativo" | "
   return "Ativo";
 }
 
+// `events.workload_hours` é DECIMAL(5,2), que o mysql2 entrega como texto ("4.50") para não perder
+// precisão. A conversão para número acontece aqui, uma vez, para nenhuma resposta da API sair
+// com a carga horária como string. `undefined` também vira `null`: é o que chega de uma consulta
+// que não selecionou a coluna, e tratar como ausente é mais seguro que devolver `NaN`.
+export function parseWorkloadHours(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export function classifyTimeFilter(row: {
   starts_at: Date | string;
   ends_at: Date | string | null;

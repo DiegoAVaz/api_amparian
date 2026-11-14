@@ -1,5 +1,6 @@
 import { getEnv } from "../config/env";
 import { db } from "../db/knex";
+import { AttendanceRepository } from "../repositories/attendance.repository";
 import { EventRepository } from "../repositories/event.repository";
 import { LookupRepository } from "../repositories/lookup.repository";
 import { PasswordResetRepository } from "../repositories/password-reset.repository";
@@ -36,6 +37,7 @@ import {
   UpdateRegistrationStatusUseCase,
   UploadEventCoverUseCase,
 } from "../use-cases/events/organizer-event.use-cases";
+import { RecordAttendanceUseCase } from "../use-cases/events/attendance.use-cases";
 import {
   CancelRegistrationUseCase,
   GetMyAgendaUseCase,
@@ -61,6 +63,7 @@ function buildContainer() {
   const lookupRepo = new LookupRepository(db);
   const eventRepo = new EventRepository(db);
   const registrationRepo = new RegistrationRepository(db);
+  const attendanceRepo = new AttendanceRepository(db);
 
   const authTokens = new AuthTokensHelper(refreshTokenRepo, signAccessToken, {
     refreshTtlMs: refreshTtlMs(),
@@ -106,7 +109,7 @@ function buildContainer() {
     getProfileStats: new GetProfileStatsUseCase(
       userRepo,
       eventRepo,
-      registrationRepo,
+      attendanceRepo,
     ),
 
     listPublicEvents: new ListPublicEventsUseCase(eventRepo, resolvePublicUrl),
@@ -144,6 +147,11 @@ function buildContainer() {
     updateRegistrationStatus: new UpdateRegistrationStatusUseCase(
       eventRepo,
       registrationRepo,
+    ),
+    recordAttendance: new RecordAttendanceUseCase(
+      eventRepo,
+      registrationRepo,
+      attendanceRepo,
     ),
 
     listMyRegistrations: new ListMyRegistrationsUseCase(registrationRepo),

@@ -5,8 +5,8 @@ import {
   validateImage,
 } from "../../services/storage";
 import type { PublicUrlResolver, Storage } from "../../services/storage";
+import type { AttendanceRepository } from "../../repositories/attendance.repository";
 import type { EventRepository } from "../../repositories/event.repository";
-import type { RegistrationRepository } from "../../repositories/registration.repository";
 import type { UserRepository } from "../../repositories/user.repository";
 import { HttpError } from "../../utils/http-error";
 
@@ -70,7 +70,7 @@ export class GetProfileStatsUseCase {
   constructor(
     private readonly users: UserRepository,
     private readonly events: EventRepository,
-    private readonly registrations: RegistrationRepository,
+    private readonly attendances: AttendanceRepository,
   ) {}
 
   async execute(userId: number) {
@@ -78,13 +78,13 @@ export class GetProfileStatsUseCase {
     if (!user) throw userNotFoundError();
 
     const eventsCreated = await this.events.countByOrganizer(userId);
-    const eventsAttended =
-      await this.registrations.countConfirmedRegistrationsByUser(userId);
-    const causesSupported =
-      await this.registrations.countDistinctCausesSupported(userId);
+    // Horas, eventos frequentados e causas apoiadas vêm da presença registrada pelo organizador
+    // (RC-10), e não mais de inscrições confirmadas — que contavam até eventos que nem aconteceram.
+    const { hoursDonated, eventsAttended, causesSupported } =
+      await this.attendances.totalsByUser(userId);
 
     return {
-      hoursDonated: 0,
+      hoursDonated,
       causesSupported,
       eventsAttended,
       eventsCreated,

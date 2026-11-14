@@ -98,6 +98,20 @@ function lookupCodeArraySchema(
     : arraySchema;
 }
 
+// Carga horária do evento (RC-03 em docs/Backend/Certificados de Participação.md): igual para
+// todos os presentes, em horas, aceitando fração (2,5 h). O teto de 500 h e as duas casas decimais
+// acompanham a coluna DECIMAL(5,2). Nula enquanto o evento é rascunho; quem exige o valor para
+// publicar é o caso de uso, porque depende do status atual do evento.
+const workloadHoursSchema = z
+  .number({ error: "A carga horária deve ser um número" })
+  .positive({ error: "A carga horária deve ser maior que 0" })
+  .max(500, { error: "A carga horária deve ser de no máximo 500 horas" })
+  .refine((value) => Math.abs(value * 100 - Math.round(value * 100)) < 1e-9, {
+    error: "A carga horária aceita no máximo duas casas decimais",
+  })
+  .nullable()
+  .optional();
+
 const profileStateSchema = z.preprocess(
   (value) => {
     if (value === null || value === undefined || typeof value !== "string") {
@@ -232,6 +246,7 @@ export const createEventBodySchema = z
       })
       .nullable()
       .optional(),
+    workloadHours: workloadHoursSchema,
     highlightSkill: nullableOptionalTrimmedString(
       255,
       "habilidade em destaque",
@@ -287,6 +302,7 @@ export const patchEventBodySchema = z
       })
       .nullable()
       .optional(),
+    workloadHours: workloadHoursSchema,
     highlightSkill: nullableOptionalTrimmedString(
       255,
       "habilidade em destaque",
@@ -334,6 +350,32 @@ export const updateOrganizerRegistrationBodySchema = z.object({
   }),
 });
 
+// Teto do lote de presença. Sem ele, um envio com milhares de itens viraria um único `whereIn`
+// gigante e manteria o evento travado durante toda a consulta.
+export const ATTENDANCE_BATCH_MAX = 1000;
+
+// Lista de chamada do organizador (RC-02): uma ou mais inscrições, cada uma marcada como presente
+// ou ausente. Repetir a mesma inscrição no lote é recusado pelo caso de uso.
+export const recordAttendanceBodySchema = z.object({
+  items: z
+    .array(
+      z.object({
+        registrationId: z
+          .number({ error: "O ID da inscrição deve ser um número" })
+          .int({ error: "O ID da inscrição deve ser um número inteiro" })
+          .positive({ error: "O ID da inscrição deve ser maior que 0" }),
+        status: z.enum(["present", "absent"], {
+          error: "A presença deve ser present ou absent",
+        }),
+      }),
+      { error: "Informe a lista de presença" },
+    )
+    .min(1, { error: "Informe a presença de ao menos uma inscrição" })
+    .max(ATTENDANCE_BATCH_MAX, {
+      error: `Envie no máximo ${ATTENDANCE_BATCH_MAX} inscrições por vez`,
+    }),
+});
+
 export const meEventIdParamsSchema = z.object({
   eventId: z.coerce
     .number({ error: "O ID do evento deve ser um número" })
@@ -366,7 +408,8 @@ export function registerMeBoundaryContract(
   const profileStatsSchema = registry.register(
     "ProfileStatsResponse",
     z.object({
-      hoursDonated: z.number().int(),
+      // Soma da carga horária dos eventos com presença registrada; aceita fração (2,5 h).
+      hoursDonated: z.number(),
       causesSupported: z.number().int(),
       eventsAttended: z.number().int(),
       eventsCreated: z.number().int(),
@@ -443,6 +486,7 @@ export function registerMeBoundaryContract(
       location_name: z.string().nullable(),
       is_remote: z.boolean(),
       capacity: z.number().int().nullable(),
+      workload_hours: z.number().nullable(),
       cover_image_url: z.url().nullable(),
       highlight_skill: z.string().nullable(),
       status: z.enum(["draft", "published", "cancelled"]),
@@ -474,6 +518,20 @@ export function registerMeBoundaryContract(
           cityUf: z.string(),
           registrationDate: z.iso.datetime(),
           status: z.enum(["pending", "confirmed", "cancelled"]),
+          // Presença registrada; `null` sem marcação ou quando a inscrição não está confirmada.
+          attendance: z.enum(["present", "absent"]).nullable(),
+        }),
+      ),
+    }),
+  );
+
+  const attendanceListSchema = registry.register(
+    "AttendanceListResponse",
+    z.object({
+      data: z.array(
+        z.object({
+          registrationId: z.number().int(),
+          status: z.enum(["present", "absent"]),
         }),
       ),
     }),
@@ -882,6 +940,11 @@ export function registerMeBoundaryContract(
         description: "Autenticação necessária.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
+      "422": {
+        description:
+          "EVENT_WORKLOAD_REQUIRED: o evento foi enviado com publish: true sem carga horária.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
       "500": {
         description: "Erro interno.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
@@ -968,6 +1031,54 @@ export function registerMeBoundaryContract(
       "422": {
         description:
           "Status da inscrição não pode ser alterado no estado atual.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      "500": {
+        description: "Erro interno.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+    },
+  });
+
+  registry.registerPath({
+    method: "put",
+    path: "/me/events/{eventId}/attendance",
+    tags: ["me"],
+    summary:
+      "Registra em lote a presença das inscrições confirmadas de um evento do organizador.",
+    description:
+      "Grava ou atualiza a presença de cada inscrição enviada e devolve a lista de presença do evento. Aberta do início do evento até 30 dias após o fim (ou após o início, se o evento não tiver data de fim).",
+    security: [shared.bearerAuthSecurity],
+    request: {
+      params: z.object({ eventId: shared.eventIdParam }),
+      body: {
+        required: true,
+        content: {
+          "application/json": { schema: recordAttendanceBodySchema },
+        },
+      },
+    },
+    responses: {
+      "200": {
+        description: "Presença gravada; lista de presença do evento.",
+        content: { "application/json": { schema: attendanceListSchema } },
+      },
+      "400": {
+        description: "Payload ou params inválidos.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      "401": {
+        description: "Autenticação necessária.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      "404": {
+        description:
+          "EVENT_NOT_FOUND (evento inexistente ou de outro organizador) ou REGISTRATION_NOT_FOUND (inscrição de outro evento).",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      "422": {
+        description:
+          "ATTENDANCE_DUPLICATED_REGISTRATION, EVENT_CANCELLED, INVALID_EVENT_DATES, ATTENDANCE_NOT_OPEN, ATTENDANCE_WINDOW_CLOSED ou REGISTRATION_NOT_CONFIRMED.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "500": {
@@ -1085,6 +1196,11 @@ export function registerMeBoundaryContract(
       },
       "404": {
         description: "Evento não encontrado.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      "422": {
+        description:
+          "EVENT_WORKLOAD_REQUIRED: publicar um rascunho, ou apagar a carga horária de um evento publicado, sem informar a carga horária.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "500": {

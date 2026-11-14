@@ -122,22 +122,26 @@ test("update profile returns 404 when updated user cannot be loaded", async () =
   );
 });
 
-test("profile stats returns aggregated application metrics", async () => {
+test("profile stats come from registered attendance, including fractional hours", async () => {
+  const askedFor: number[] = [];
   const result = await new GetProfileStatsUseCase(
     { findById: async () => user() } as never,
     { countByOrganizer: async () => 3 } as never,
     {
-      countConfirmedRegistrationsByUser: async () => 7,
-      countDistinctCausesSupported: async () => 4,
+      totalsByUser: async (userId: number) => {
+        askedFor.push(userId);
+        return { eventsAttended: 7, causesSupported: 4, hoursDonated: 18.5 };
+      },
     } as never,
   ).execute(1);
 
   assert.deepEqual(result, {
-    hoursDonated: 0,
+    hoursDonated: 18.5,
     causesSupported: 4,
     eventsAttended: 7,
     eventsCreated: 3,
   });
+  assert.deepEqual(askedFor, [1]);
 });
 
 test("profile stats returns 404 when user does not exist", async () => {
@@ -147,8 +151,7 @@ test("profile stats returns 404 when user does not exist", async () => {
         { findById: async () => undefined } as never,
         { countByOrganizer: async () => 0 } as never,
         {
-          countConfirmedRegistrationsByUser: async () => 0,
-          countDistinctCausesSupported: async () => 0,
+          totalsByUser: async () => ({ eventsAttended: 0, causesSupported: 0, hoursDonated: 0 }),
         } as never,
       ).execute(1),
     { status: 404, code: "USER_NOT_FOUND" },

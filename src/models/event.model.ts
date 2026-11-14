@@ -12,6 +12,7 @@ export type EventRecord = {
   location_name: string | null;
   is_remote: boolean | number;
   capacity: number | null;
+  workload_hours: string | null;
   cover_image_url: string | null;
   highlight_skill: string | null;
   status: EventStatus;

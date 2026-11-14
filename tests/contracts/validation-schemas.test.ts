@@ -11,9 +11,11 @@ import {
   publicEventsListQuerySchema,
 } from "../../src/contracts/events.contract";
 import {
+  ATTENDANCE_BATCH_MAX,
   createEventBodySchema,
   meProfilePatchBodySchema,
   patchEventBodySchema,
+  recordAttendanceBodySchema,
   updateOrganizerRegistrationBodySchema,
 } from "../../src/contracts/me.contract";
 
@@ -124,6 +126,44 @@ test("organizer event schemas reject invalid closed-domain values", () => {
   );
 
   assert.equal(patchEventBodySchema.safeParse({}).success, false);
+
+  // Carga horária (RC-03): maior que 0, até 500, no máximo duas casas decimais, e pode ser nula.
+  for (const invalid of [0, -1, 500.01, 2.555, "4"]) {
+    assert.equal(
+      patchEventBodySchema.safeParse({ workloadHours: invalid }).success,
+      false,
+      `workloadHours ${String(invalid)} deveria ser recusada`,
+    );
+  }
+  // Lote de presença: de 1 até ATTENDANCE_BATCH_MAX itens, status fechado.
+  assert.equal(recordAttendanceBodySchema.safeParse({ items: [] }).success, false);
+  assert.equal(
+    recordAttendanceBodySchema.safeParse({ items: [{ registrationId: 1, status: "late" }] }).success,
+    false,
+  );
+  assert.equal(
+    recordAttendanceBodySchema.safeParse({
+      items: Array.from({ length: ATTENDANCE_BATCH_MAX + 1 }, (_, i) => ({ registrationId: i + 1, status: "present" })),
+    }).success,
+    false,
+  );
+  assert.equal(
+    recordAttendanceBodySchema.safeParse({
+      items: [
+        { registrationId: 1, status: "present" },
+        { registrationId: 2, status: "absent" },
+      ],
+    }).success,
+    true,
+  );
+
+  for (const valid of [0.5, 2.5, 4, 500, null]) {
+    assert.equal(
+      patchEventBodySchema.safeParse({ workloadHours: valid }).success,
+      true,
+      `workloadHours ${String(valid)} deveria ser aceita`,
+    );
+  }
   assert.equal(
     updateOrganizerRegistrationBodySchema.safeParse({ status: "approved" }).success,
     false,

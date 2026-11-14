@@ -31,6 +31,7 @@ meRouter.patch(
   "/events/:eventId/registrations/:registrationId",
   meController.patchOrganizerRegistration,
 );
+meRouter.put("/events/:eventId/attendance", meController.recordAttendance);
 meRouter.post("/events/:eventId/publish", meController.publishEvent);
 
 meRouter.post(

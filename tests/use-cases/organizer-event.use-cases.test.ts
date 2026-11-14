@@ -38,6 +38,7 @@ function event(overrides: Record<string, unknown> = {}) {
     location_name: null,
     is_remote: true,
     capacity: null,
+    workload_hours: null,
     cover_image_url: null,
     highlight_skill: null,
     status: "draft",
@@ -164,7 +165,7 @@ test("updates organizer event fields and lookup relationships", async () => {
     }),
   });
   const events = {
-    findByOrganizerAndId: async () => event({ id: 20 }),
+    findByOrganizerAndId: async () => event({ id: 20, workload_hours: "4.00" }),
     transaction: async (fn: (trxArg: typeof trx) => Promise<void>) => fn(trx),
     updateEvent: async (_trx: unknown, eventId: number, row: unknown) => {
       updatedRows.push({ eventId, row });
@@ -232,6 +233,20 @@ test("lists organizer registrations with participant contact data", async () => 
         phone: "11999999999",
         city: "Sao Paulo",
         state: "SP",
+        attendance_status: "present",
+      },
+      {
+        id: 12,
+        status: "cancelled",
+        participant_role: null,
+        created_at: createdAt,
+        name: "Bia",
+        email: "bia@example.com",
+        phone: null,
+        city: null,
+        state: null,
+        // Presença lançada antes do cancelamento: continua no banco, mas não vale (RC-02).
+        attendance_status: "present",
       },
     ],
   };
@@ -252,6 +267,18 @@ test("lists organizer registrations with participant contact data", async () => 
         cityUf: "Sao Paulo / SP",
         registrationDate: new Date(createdAt).toISOString(),
         status: "confirmed",
+        attendance: "present",
+      },
+      {
+        id: "12",
+        name: "Bia",
+        role: "",
+        email: "bia@example.com",
+        phone: "",
+        cityUf: "",
+        registrationDate: new Date(createdAt).toISOString(),
+        status: "cancelled",
+        attendance: null,
       },
     ],
   });
@@ -284,7 +311,7 @@ function registration(overrides: Record<string, unknown> = {}) {
 test("publishes a valid draft event", async () => {
   const statusUpdates: Array<{ userId: number; eventId: number; status: string }> = [];
   const events = {
-    findByOrganizerAndId: async () => event(),
+    findByOrganizerAndId: async () => event({ workload_hours: "4.00" }),
     findTypesForEvent: async () => [{ code: "education", label: "Educacao" }],
     findRequirementsForEvent: async () => [],
     setStatus: async (userId: number, eventId: number, status: string) => {
@@ -353,6 +380,136 @@ test("publish requires location for in-person events and at least one type", asy
       } as never, fakePublicUrl).execute(7, 1),
     { status: 422, code: "EVENT_TYPE_REQUIRED" },
   );
+});
+
+/** Repositório falso mínimo para os testes de carga horária na criação e na edição. */
+function workloadEvents(existing: Record<string, unknown>, captured: { inserted?: unknown; updated?: unknown }) {
+  return {
+    transaction: async (fn: (trx: unknown) => Promise<unknown>) => fn({}),
+    insertEvent: async (_trx: unknown, input: unknown) => {
+      captured.inserted = input;
+      return 30;
+    },
+    updateEvent: async (_trx: unknown, _eventId: number, row: unknown) => {
+      captured.updated = row;
+    },
+    replaceEventTypes: async () => undefined,
+    replaceEventRequirements: async () => undefined,
+    findByOrganizerAndId: async () => existing,
+    findTypesForEvent: async () => [{ code: "education", label: "Educacao" }],
+    findRequirementsForEvent: async () => [],
+  };
+}
+
+const workloadLookups = {
+  findEventTypeIdsByCodes: async () => [{ id: 1, code: "education" }],
+  findRequirementIdsByCodes: async () => [],
+};
+
+const newEventBody = {
+  title: "Evento",
+  summary: "Resumo",
+  startsAt: futureIso(),
+  isRemote: true,
+  typeCodes: ["education"],
+  requirementCodes: [],
+};
+
+test("creating a published event requires workload hours; a draft does not", async () => {
+  await assertHttpError(
+    () =>
+      new CreateEventUseCase(workloadEvents(event(), {}) as never, workloadLookups as never, fakePublicUrl).execute(
+        7,
+        { ...newEventBody, publish: true },
+      ),
+    { status: 422, code: "EVENT_WORKLOAD_REQUIRED" },
+  );
+
+  const captured: { inserted?: unknown } = {};
+  await new CreateEventUseCase(workloadEvents(event(), captured) as never, workloadLookups as never, fakePublicUrl).execute(
+    7,
+    { ...newEventBody, publish: false },
+  );
+  assert.equal((captured.inserted as { workload_hours: unknown }).workload_hours, null);
+});
+
+test("creating a published event stores the workload hours", async () => {
+  const captured: { inserted?: unknown } = {};
+
+  await new CreateEventUseCase(workloadEvents(event(), captured) as never, workloadLookups as never, fakePublicUrl).execute(
+    7,
+    { ...newEventBody, publish: true, workloadHours: 4.5 },
+  );
+
+  assert.equal((captured.inserted as { workload_hours: number }).workload_hours, 4.5);
+  assert.equal((captured.inserted as { status: string }).status, "published");
+});
+
+test("publishing a draft through edit requires workload hours, from the patch or the stored value", async () => {
+  await assertHttpError(
+    () =>
+      new UpdateEventUseCase(workloadEvents(event({ status: "draft" }), {}) as never, fakePublicUrl).execute(7, 1, {
+        publish: true,
+      }),
+    { status: 422, code: "EVENT_WORKLOAD_REQUIRED" },
+  );
+
+  const fromPatch: { updated?: unknown } = {};
+  await new UpdateEventUseCase(workloadEvents(event({ status: "draft" }), fromPatch) as never, fakePublicUrl).execute(
+    7,
+    1,
+    { publish: true, workloadHours: 3 },
+  );
+  assert.equal((fromPatch.updated as { workload_hours: number }).workload_hours, 3);
+
+  const fromStored: { updated?: unknown } = {};
+  await new UpdateEventUseCase(
+    workloadEvents(event({ status: "draft", workload_hours: "2.50" }), fromStored) as never,
+    fakePublicUrl,
+  ).execute(7, 1, { publish: true });
+  assert.equal((fromStored.updated as { status: string }).status, "published");
+});
+
+test("a published event without workload hours stays editable, but cannot have them removed", async () => {
+  const legacy: { updated?: unknown } = {};
+  await new UpdateEventUseCase(workloadEvents(event({ status: "published" }), legacy) as never, fakePublicUrl).execute(
+    7,
+    1,
+    { title: "Novo titulo", publish: true },
+  );
+  assert.equal((legacy.updated as { title: string }).title, "Novo titulo");
+
+  await assertHttpError(
+    () =>
+      new UpdateEventUseCase(
+        workloadEvents(event({ status: "published", workload_hours: "4.00" }), {}) as never,
+        fakePublicUrl,
+      ).execute(7, 1, { workloadHours: null }),
+    { status: 422, code: "EVENT_WORKLOAD_REQUIRED" },
+  );
+});
+
+test("publish route requires workload hours", async () => {
+  await assertHttpError(
+    () =>
+      new PublishEventUseCase({
+        findByOrganizerAndId: async () => event({ workload_hours: null }),
+        findTypesForEvent: async () => [{ code: "education", label: "Educacao" }],
+      } as never, fakePublicUrl).execute(7, 1),
+    { status: 422, code: "EVENT_WORKLOAD_REQUIRED" },
+  );
+});
+
+test("organizer event detail returns workload hours as a number", async () => {
+  const events = {
+    findByOrganizerAndId: async () => event({ workload_hours: "4.50" }),
+    findTypesForEvent: async () => [],
+    findRequirementsForEvent: async () => [],
+  };
+
+  const result = await new GetOrganizerEventUseCase(events as never, fakePublicUrl).execute(7, 1);
+
+  assert.equal(result.workload_hours, 4.5);
 });
 
 test("delete removes draft events without registrations", async () => {
