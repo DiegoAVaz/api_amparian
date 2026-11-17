@@ -1,10 +1,19 @@
 import { getEnv } from "../../config/env";
+import { AzureDocumentStorage } from "./azure-document.storage";
 import { AzureBlobStorage } from "./azure.storage";
+import type { DocumentStorage } from "./document-storage";
 import type { Storage } from "./storage";
 
 export type { Storage, StoredObject } from "./storage";
 export { AzureBlobStorage } from "./azure.storage";
 export type { AzureBlobStorageConfig } from "./azure.storage";
+export type { DocumentStorage, PdfDocument } from "./document-storage";
+export { AzureDocumentStorage } from "./azure-document.storage";
+export type {
+  AzureDocumentStorageConfig,
+  DocumentContainerClient,
+} from "./azure-document.storage";
+export { buildCertificateKey } from "./certificate-key";
 export { createPublicUrlResolver, storageKeyOf } from "./public-url";
 export { deleteBlobIfOurs } from "./cleanup";
 export {
@@ -32,3 +41,15 @@ export function createStorage(): Storage {
   return cached;
 }
 
+let cachedCertificates: DocumentStorage | null = null;
+
+export function createCertificateStorage(): DocumentStorage {
+  if (!cachedCertificates) {
+    const env = getEnv();
+    cachedCertificates = new AzureDocumentStorage({
+      connectionString: env.AZURE_STORAGE_CONNECTION_STRING,
+      container: env.AZURE_STORAGE_CERTIFICATES_CONTAINER,
+    });
+  }
+  return cachedCertificates;
+}

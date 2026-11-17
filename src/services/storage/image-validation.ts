@@ -109,7 +109,7 @@ export function assertSafeStorageKey(key: string): string {
   return key;
 }
 
-function assertOwnerId(id: number): number {
+export function assertOwnerId(id: number): number {
   if (!Number.isSafeInteger(id) || id <= 0) {
     throw internalServerError(
       "INVALID_STORAGE_KEY",
