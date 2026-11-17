@@ -50,20 +50,20 @@ const schema = z
       .number()
       .int()
       .positive()
-      .default(15 * 60 * 1000),
-    AUTH_RATE_LIMIT_LOGIN_MAX: z.coerce.number().int().positive().default(5),
-    AUTH_RATE_LIMIT_REGISTER_MAX: z.coerce.number().int().positive().default(5),
+      .default(5 * 60 * 1000),
+    AUTH_RATE_LIMIT_LOGIN_MAX: z.coerce.number().int().positive().default(15),
+    AUTH_RATE_LIMIT_REGISTER_MAX: z.coerce.number().int().positive().default(15),
     AUTH_RATE_LIMIT_REFRESH_MAX: z.coerce.number().int().positive().default(15),
     AUTH_RATE_LIMIT_FORGOT_PASSWORD_MAX: z.coerce
       .number()
       .int()
       .positive()
-      .default(5),
+      .default(10),
     AUTH_RATE_LIMIT_RESET_PASSWORD_MAX: z.coerce
       .number()
       .int()
       .positive()
-      .default(5),
+      .default(10),
     DB_HOST: z.string().default("127.0.0.1"),
     DB_PORT: z.coerce.number().default(3306),
     DB_USER: z.string().default("root"),
@@ -130,6 +130,24 @@ const schema = z
         })
         .default("amparian"),
     ),
+    AZURE_STORAGE_CERTIFICATES_CONTAINER: z.preprocess(
+      emptyToUndefined,
+      z
+        .string()
+        .min(3, {
+          error:
+            "AZURE_STORAGE_CERTIFICATES_CONTAINER deve ter no mínimo 3 caracteres",
+        })
+        .max(63, {
+          error:
+            "AZURE_STORAGE_CERTIFICATES_CONTAINER deve ter no máximo 63 caracteres",
+        })
+        .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, {
+          error:
+            "AZURE_STORAGE_CERTIFICATES_CONTAINER deve usar apenas minúsculas, números e hífen, começar e terminar em letra ou número, e não pode ter hífens consecutivos",
+        })
+        .default("amparian-certificados"),
+    ),
     STORAGE_PUBLIC_BASE_URL: z.preprocess(
       emptyToUndefined,
       z
@@ -154,6 +172,21 @@ const schema = z
     ),
   })
   .superRefine((value, ctx) => {
+    // Vale em todo ambiente: apontar os certificados para o container público
+    // das imagens deixaria cada PDF legível por quem tiver a URL — exatamente o
+    // que o container separado existe para evitar.
+    if (
+      value.AZURE_STORAGE_CERTIFICATES_CONTAINER ===
+      value.AZURE_STORAGE_CONTAINER
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "AZURE_STORAGE_CERTIFICATES_CONTAINER não pode ser o mesmo container das imagens (AZURE_STORAGE_CONTAINER): o de imagens é público, e o de certificados precisa ser privado",
+        path: ["AZURE_STORAGE_CERTIFICATES_CONTAINER"],
+      });
+    }
+
     if (value.NODE_ENV === "development") return;
 
     if (
