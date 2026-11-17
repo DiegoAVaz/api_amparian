@@ -32,6 +32,39 @@ export function parseWorkloadHours(value: string | number | null | undefined): n
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+const BRAZIL_DAY = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Sao_Paulo",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+// Carga horária efetiva do evento (RC-03): a regra única usada no certificado e em "Horas doadas",
+// para os dois nunca discordarem.
+//   1. A informada pelo organizador, quando existe — vale para qualquer evento.
+//   2. Senão, a duração do evento, se ele começa e termina no mesmo dia no horário de Brasília.
+//      "Mesmo dia" é medido no fuso de Brasília porque as datas ficam em UTC: um evento das 20h às
+//      23h vai das 23h às 2h em UTC e, medido em UTC, viraria "dois dias".
+//   3. Senão (vários dias, ou sem horário de término), `null`: o certificado mostra só o período.
+export function effectiveWorkloadHours(row: {
+  workload_hours: string | number | null | undefined;
+  starts_at: Date | string;
+  ends_at: Date | string | null;
+}): number | null {
+  const informed = parseWorkloadHours(row.workload_hours);
+  if (informed !== null) return informed;
+  if (!row.ends_at) return null;
+
+  const starts = new Date(row.starts_at);
+  const ends = new Date(row.ends_at);
+  if (Number.isNaN(starts.getTime()) || Number.isNaN(ends.getTime()) || ends <= starts) {
+    return null;
+  }
+  if (BRAZIL_DAY.format(starts) !== BRAZIL_DAY.format(ends)) return null;
+
+  return Math.round(((ends.getTime() - starts.getTime()) / 3_600_000) * 100) / 100;
+}
+
 export function classifyTimeFilter(row: {
   starts_at: Date | string;
   ends_at: Date | string | null;

@@ -36,18 +36,6 @@ function isBlank(value: unknown): boolean {
   return typeof value !== "string" || value.trim().length === 0;
 }
 
-// RC-03: um evento só é publicado com carga horária, porque é ela que vai impressa no certificado
-// de quem estiver presente. Rascunho pode ficar sem.
-function ensureWorkloadForPublish(workloadHours: number | null): void {
-  if (workloadHours === null) {
-    throw new HttpError(
-      422,
-      "EVENT_WORKLOAD_REQUIRED",
-      "Informe a carga horária do evento antes de publicar",
-    );
-  }
-}
-
 export class ListMyEventsUseCase {
   constructor(
     private readonly events: EventRepository,
@@ -152,7 +140,6 @@ export class CreateEventUseCase {
     const startsAt = new Date(body.startsAt);
     const endsAt = body.endsAt ? new Date(body.endsAt) : null;
     ensureValidEventDates(startsAt, endsAt);
-    if (body.publish) ensureWorkloadForPublish(body.workloadHours ?? null);
 
     const typeIds = await this.lookups.findEventTypeIdsByCodes(body.typeCodes);
     if (typeIds.length !== body.typeCodes.length) {
@@ -248,22 +235,6 @@ export class UpdateEventUseCase {
     const existing = await this.events.findByOrganizerAndId(userId, eventId);
     if (!existing)
       throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
-
-    // RC-03 nos dois sentidos em que a edição pode ferir a regra: publicar um rascunho sem carga
-    // horária, ou apagar a carga horária de um evento publicado. Evento publicado antes desta regra
-    // e ainda sem o campo continua editável no resto — só não emite certificado até ganhar um valor.
-    const willBePublished =
-      patch.publish !== undefined ? patch.publish : existing.status === "published";
-    const nextWorkload =
-      patch.workloadHours !== undefined
-        ? patch.workloadHours
-        : parseWorkloadHours(existing.workload_hours);
-    if (
-      willBePublished &&
-      (existing.status !== "published" || patch.workloadHours === null)
-    ) {
-      ensureWorkloadForPublish(nextWorkload);
-    }
     const nextStartsAt =
       patch.startsAt !== undefined
         ? new Date(patch.startsAt)
@@ -523,8 +494,6 @@ export class PublishEventUseCase {
         "Informe ao menos um tipo de evento antes de publicar",
       );
     }
-
-    ensureWorkloadForPublish(parseWorkloadHours(event.workload_hours));
 
     const n = await this.events.setStatus(userId, eventId, "published");
     if (!n)

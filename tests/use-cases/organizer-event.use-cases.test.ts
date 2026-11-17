@@ -415,22 +415,16 @@ const newEventBody = {
   requirementCodes: [],
 };
 
-test("creating a published event requires workload hours; a draft does not", async () => {
-  await assertHttpError(
-    () =>
-      new CreateEventUseCase(workloadEvents(event(), {}) as never, workloadLookups as never, fakePublicUrl).execute(
-        7,
-        { ...newEventBody, publish: true },
-      ),
-    { status: 422, code: "EVENT_WORKLOAD_REQUIRED" },
-  );
-
+// RC-03: a carga horária é opcional. Sem ela, o certificado usa a duração (evento de um dia) ou
+// mostra só o período — nada impede publicar.
+test("an event can be published without workload hours", async () => {
   const captured: { inserted?: unknown } = {};
   await new CreateEventUseCase(workloadEvents(event(), captured) as never, workloadLookups as never, fakePublicUrl).execute(
     7,
-    { ...newEventBody, publish: false },
+    { ...newEventBody, publish: true },
   );
   assert.equal((captured.inserted as { workload_hours: unknown }).workload_hours, null);
+  assert.equal((captured.inserted as { status: string }).status, "published");
 });
 
 test("creating a published event stores the workload hours", async () => {
@@ -445,59 +439,33 @@ test("creating a published event stores the workload hours", async () => {
   assert.equal((captured.inserted as { status: string }).status, "published");
 });
 
-test("publishing a draft through edit requires workload hours, from the patch or the stored value", async () => {
-  await assertHttpError(
-    () =>
-      new UpdateEventUseCase(workloadEvents(event({ status: "draft" }), {}) as never, fakePublicUrl).execute(7, 1, {
-        publish: true,
-      }),
-    { status: 422, code: "EVENT_WORKLOAD_REQUIRED" },
-  );
-
-  const fromPatch: { updated?: unknown } = {};
-  await new UpdateEventUseCase(workloadEvents(event({ status: "draft" }), fromPatch) as never, fakePublicUrl).execute(
+test("editing sets or clears the informed workload hours, even on a published event", async () => {
+  const set: { updated?: unknown } = {};
+  await new UpdateEventUseCase(workloadEvents(event({ status: "draft" }), set) as never, fakePublicUrl).execute(
     7,
     1,
     { publish: true, workloadHours: 3 },
   );
-  assert.equal((fromPatch.updated as { workload_hours: number }).workload_hours, 3);
+  assert.equal((set.updated as { workload_hours: number }).workload_hours, 3);
+  assert.equal((set.updated as { status: string }).status, "published");
 
-  const fromStored: { updated?: unknown } = {};
+  const cleared: { updated?: unknown } = {};
   await new UpdateEventUseCase(
-    workloadEvents(event({ status: "draft", workload_hours: "2.50" }), fromStored) as never,
+    workloadEvents(event({ status: "published", workload_hours: "4.00" }), cleared) as never,
     fakePublicUrl,
-  ).execute(7, 1, { publish: true });
-  assert.equal((fromStored.updated as { status: string }).status, "published");
+  ).execute(7, 1, { workloadHours: null });
+  assert.equal((cleared.updated as { workload_hours: unknown }).workload_hours, null);
 });
 
-test("a published event without workload hours stays editable, but cannot have them removed", async () => {
-  const legacy: { updated?: unknown } = {};
-  await new UpdateEventUseCase(workloadEvents(event({ status: "published" }), legacy) as never, fakePublicUrl).execute(
-    7,
-    1,
-    { title: "Novo titulo", publish: true },
-  );
-  assert.equal((legacy.updated as { title: string }).title, "Novo titulo");
+test("publish route does not require workload hours", async () => {
+  const result = await new PublishEventUseCase({
+    findByOrganizerAndId: async () => event({ workload_hours: null }),
+    findTypesForEvent: async () => [{ code: "education", label: "Educacao" }],
+    findRequirementsForEvent: async () => [],
+    setStatus: async () => 1,
+  } as never, fakePublicUrl).execute(7, 1);
 
-  await assertHttpError(
-    () =>
-      new UpdateEventUseCase(
-        workloadEvents(event({ status: "published", workload_hours: "4.00" }), {}) as never,
-        fakePublicUrl,
-      ).execute(7, 1, { workloadHours: null }),
-    { status: 422, code: "EVENT_WORKLOAD_REQUIRED" },
-  );
-});
-
-test("publish route requires workload hours", async () => {
-  await assertHttpError(
-    () =>
-      new PublishEventUseCase({
-        findByOrganizerAndId: async () => event({ workload_hours: null }),
-        findTypesForEvent: async () => [{ code: "education", label: "Educacao" }],
-      } as never, fakePublicUrl).execute(7, 1),
-    { status: 422, code: "EVENT_WORKLOAD_REQUIRED" },
-  );
+  assert.equal(Number(result.id), 1);
 });
 
 test("organizer event detail returns workload hours as a number", async () => {

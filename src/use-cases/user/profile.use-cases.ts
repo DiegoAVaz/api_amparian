@@ -8,6 +8,7 @@ import type { PublicUrlResolver, Storage } from "../../services/storage";
 import type { AttendanceRepository } from "../../repositories/attendance.repository";
 import type { EventRepository } from "../../repositories/event.repository";
 import type { UserRepository } from "../../repositories/user.repository";
+import { effectiveWorkloadHours } from "../../utils/event-helpers";
 import { HttpError } from "../../utils/http-error";
 
 function userNotFoundError(): HttpError {
@@ -80,8 +81,19 @@ export class GetProfileStatsUseCase {
     const eventsCreated = await this.events.countByOrganizer(userId);
     // Horas, eventos frequentados e causas apoiadas vêm da presença registrada pelo organizador
     // (RC-10), e não mais de inscrições confirmadas — que contavam até eventos que nem aconteceram.
-    const { hoursDonated, eventsAttended, causesSupported } =
-      await this.attendances.totalsByUser(userId);
+    const attended = await this.attendances.listAttendedEventsByUser(userId);
+
+    // Toda participação conta como evento frequentado, com ou sem carga horária: o voluntário nunca
+    // deixa de mostrar que participou. As horas somam só a carga efetiva conhecida (RC-03) — evento
+    // de vários dias sem carga informada soma 0, igual ao certificado, que mostra só o período.
+    const eventsAttended = attended.length;
+    const causesSupported = new Set(attended.map((row) => Number(row.organizer_id))).size;
+    const totalHours = attended.reduce(
+      (sum, row) => sum + (effectiveWorkloadHours(row) ?? 0),
+      0,
+    );
+    // Arredonda a soma em duas casas para não exibir resíduo de ponto flutuante (0,1 + 0,2).
+    const hoursDonated = Math.round(totalHours * 100) / 100;
 
     return {
       hoursDonated,

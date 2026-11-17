@@ -98,10 +98,10 @@ function lookupCodeArraySchema(
     : arraySchema;
 }
 
-// Carga horária do evento (RC-03 em docs/Backend/Certificados de Participação.md): igual para
-// todos os presentes, em horas, aceitando fração (2,5 h). O teto de 500 h e as duas casas decimais
-// acompanham a coluna DECIMAL(5,2). Nula enquanto o evento é rascunho; quem exige o valor para
-// publicar é o caso de uso, porque depende do status atual do evento.
+// Carga horária informada pelo organizador (RC-03 em docs/Backend/Certificados de Participação.md):
+// igual para todos os presentes, em horas, aceitando fração (2,5 h). O teto de 500 h e as duas
+// casas decimais acompanham a coluna DECIMAL(5,2). É opcional: sem ela, a carga é calculada pela
+// duração em evento de um dia, e o certificado de evento de vários dias mostra só o período.
 const workloadHoursSchema = z
   .number({ error: "A carga horária deve ser um número" })
   .positive({ error: "A carga horária deve ser maior que 0" })
@@ -408,7 +408,8 @@ export function registerMeBoundaryContract(
   const profileStatsSchema = registry.register(
     "ProfileStatsResponse",
     z.object({
-      // Soma da carga horária dos eventos com presença registrada; aceita fração (2,5 h).
+      // Soma da carga horária efetiva (RC-03: informada, ou a duração de evento de um dia) dos
+      // eventos com presença registrada; evento sem carga soma 0. Aceita fração (2,5 h).
       hoursDonated: z.number(),
       causesSupported: z.number().int(),
       eventsAttended: z.number().int(),
@@ -940,11 +941,6 @@ export function registerMeBoundaryContract(
         description: "Autenticação necessária.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
-      "422": {
-        description:
-          "EVENT_WORKLOAD_REQUIRED: o evento foi enviado com publish: true sem carga horária.",
-        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
-      },
       "500": {
         description: "Erro interno.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
@@ -1196,11 +1192,6 @@ export function registerMeBoundaryContract(
       },
       "404": {
         description: "Evento não encontrado.",
-        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
-      },
-      "422": {
-        description:
-          "EVENT_WORKLOAD_REQUIRED: publicar um rascunho, ou apagar a carga horária de um evento publicado, sem informar a carga horária.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "500": {

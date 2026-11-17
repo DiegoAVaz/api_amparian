@@ -122,23 +122,30 @@ test("update profile returns 404 when updated user cannot be loaded", async () =
   );
 });
 
-test("profile stats come from registered attendance, including fractional hours", async () => {
+test("profile stats count every attended event and sum only the known workload", async () => {
   const askedFor: number[] = [];
   const result = await new GetProfileStatsUseCase(
     { findById: async () => user() } as never,
     { countByOrganizer: async () => 3 } as never,
     {
-      totalsByUser: async (userId: number) => {
+      listAttendedEventsByUser: async (userId: number) => {
         askedFor.push(userId);
-        return { eventsAttended: 7, causesSupported: 4, hoursDonated: 18.5 };
+        return [
+          // Carga informada: vale ela.
+          { organizer_id: 10, workload_hours: "2.50", starts_at: "2026-11-08T11:00:00.000Z", ends_at: "2026-11-08T21:00:00.000Z" },
+          // Sem carga, um dia (8h às 12h em Brasília): 4 h pela duração.
+          { organizer_id: 10, workload_hours: null, starts_at: "2026-11-09T11:00:00.000Z", ends_at: "2026-11-09T15:00:00.000Z" },
+          // Sem carga, vários dias: conta como frequentado, soma 0 h.
+          { organizer_id: 20, workload_hours: null, starts_at: "2026-11-06T12:00:00.000Z", ends_at: "2026-11-08T21:00:00.000Z" },
+        ];
       },
     } as never,
   ).execute(1);
 
   assert.deepEqual(result, {
-    hoursDonated: 18.5,
-    causesSupported: 4,
-    eventsAttended: 7,
+    hoursDonated: 6.5,
+    causesSupported: 2,
+    eventsAttended: 3,
     eventsCreated: 3,
   });
   assert.deepEqual(askedFor, [1]);
@@ -150,9 +157,7 @@ test("profile stats returns 404 when user does not exist", async () => {
       new GetProfileStatsUseCase(
         { findById: async () => undefined } as never,
         { countByOrganizer: async () => 0 } as never,
-        {
-          totalsByUser: async () => ({ eventsAttended: 0, causesSupported: 0, hoursDonated: 0 }),
-        } as never,
+        { listAttendedEventsByUser: async () => [] } as never,
       ).execute(1),
     { status: 404, code: "USER_NOT_FOUND" },
   );

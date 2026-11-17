@@ -1,13 +1,14 @@
 import type { Knex } from "knex";
 import type { AttendanceStatus } from "../models";
-import { parseWorkloadHours } from "../utils/event-helpers";
 
-// Métricas de impacto de quem participou (RC-10), todas a partir da mesma base: presenças
-// registradas, em inscrições ainda confirmadas, de eventos que não foram cancelados.
-export type AttendanceTotals = {
-  eventsAttended: number;
-  causesSupported: number;
-  hoursDonated: number;
+// Um evento em que o usuário esteve presente, com o que as métricas de impacto precisam (RC-10).
+// As horas não são somadas no SQL: a carga efetiva depende de regra (informada ou calculada pela
+// duração no horário de Brasília), e essa regra mora em uma função só, no TypeScript.
+export type AttendedEventRow = {
+  organizer_id: number;
+  workload_hours: string | null;
+  starts_at: Date | string;
+  ends_at: Date | string | null;
 };
 
 // O que o caso de uso manda gravar. Fica sem `id`, `created_at` e `updated_at` porque esses
@@ -55,32 +56,20 @@ export class AttendanceRepository {
       .select("ea.registration_id", "ea.status");
   }
 
-  // Uma consulta só para as três métricas, para elas nunca discordarem entre si. Regras do RC-10
-  // (docs/Backend/Certificados de Participação.md): evento cancelado depois da presença sai das
-  // métricas (como sai do certificado), e evento sem carga horária conta como frequentado e soma
-  // 0 hora — `SUM` ignora o `NULL`.
-  async totalsByUser(userId: number, db: Knex = this.db): Promise<AttendanceTotals> {
-    const row = (await db("event_attendances as ea")
+  // Eventos em que o usuário esteve presente e que contam para as métricas (RC-10): presença
+  // `present`, inscrição ainda confirmada, evento não cancelado — a mesma base do certificado.
+  // Uma linha por evento, garantida pelos índices únicos de inscrição e de presença.
+  async listAttendedEventsByUser(
+    userId: number,
+    db: Knex = this.db,
+  ): Promise<AttendedEventRow[]> {
+    return db("event_attendances as ea")
       .join("event_registrations as er", "er.id", "ea.registration_id")
       .join("events as e", "e.id", "er.event_id")
       .where("er.user_id", userId)
       .andWhere("ea.status", "present")
       .andWhere("er.status", "confirmed")
       .andWhereNot("e.status", "cancelled")
-      .first(
-        db.raw("COUNT(ea.id) AS events_attended"),
-        db.raw("COUNT(DISTINCT e.organizer_id) AS causes_supported"),
-        // Sem nenhuma presença, SUM devolve NULL; o COALESCE garante 0.
-        db.raw("COALESCE(SUM(e.workload_hours), 0) AS hours_donated"),
-      )) as
-      | { events_attended: string | number; causes_supported: string | number; hours_donated: string | number }
-      | undefined;
-
-    // O mysql2 entrega COUNT e SUM de DECIMAL como texto; a conversão fica aqui, na borda.
-    return {
-      eventsAttended: Number(row?.events_attended ?? 0),
-      causesSupported: Number(row?.causes_supported ?? 0),
-      hoursDonated: parseWorkloadHours(row?.hours_donated) ?? 0,
-    };
+      .select("e.organizer_id", "e.workload_hours", "e.starts_at", "e.ends_at");
   }
 }
