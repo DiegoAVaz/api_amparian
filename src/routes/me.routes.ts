@@ -21,6 +21,16 @@ meRouter.delete(
 );
 meRouter.get("/agenda", meController.agenda);
 
+meRouter.get("/certificates", meController.listMyCertificates);
+meRouter.post(
+  "/registrations/:registrationId/certificate",
+  meController.issueCertificate,
+);
+meRouter.get(
+  "/certificates/:certificateId/pdf",
+  meController.downloadCertificate,
+);
+
 meRouter.get("/events", meController.listMyEvents);
 meRouter.post("/events", meController.createEvent);
 meRouter.get(

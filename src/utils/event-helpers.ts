@@ -128,3 +128,18 @@ export function classifyTimeFilter(row: {
   if (starts <= now && (!ends || ends >= now)) return "ongoing";
   return "past";
 }
+
+// Prazo para lançar ou corrigir a presença: 30 dias depois do fim do evento. Sem data de
+// fim, conta do início — é o único marco que o evento tem. Mora aqui, e não no caso de uso da
+// presença, porque "Meus certificados" usa o mesmo prazo para separar "Aguardando o organizador"
+// de "Sem presença": os dois lados nunca podem discordar sobre quando a janela fecha.
+export const ATTENDANCE_WINDOW_DAYS = 30;
+
+export function attendanceWindowClosesAt(
+  startsAt: Date,
+  endsAt: Date | null,
+): Date {
+  return new Date(
+    (endsAt ?? startsAt).getTime() + ATTENDANCE_WINDOW_DAYS * DAY_MS,
+  );
+}

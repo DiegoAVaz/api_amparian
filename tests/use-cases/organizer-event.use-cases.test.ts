@@ -234,6 +234,7 @@ test("lists organizer registrations with participant contact data", async () => 
         city: "Sao Paulo",
         state: "SP",
         attendance_status: "present",
+        certificate_id: 900,
       },
       {
         id: 12,
@@ -247,6 +248,7 @@ test("lists organizer registrations with participant contact data", async () => 
         state: null,
         // Presença lançada antes do cancelamento: continua no banco, mas não vale (RC-02).
         attendance_status: "present",
+        certificate_id: null,
       },
     ],
   };
@@ -268,6 +270,7 @@ test("lists organizer registrations with participant contact data", async () => 
         registrationDate: new Date(createdAt).toISOString(),
         status: "confirmed",
         attendance: "present",
+        certificateIssued: true,
       },
       {
         id: "12",
@@ -279,6 +282,7 @@ test("lists organizer registrations with participant contact data", async () => 
         registrationDate: new Date(createdAt).toISOString(),
         status: "cancelled",
         attendance: null,
+        certificateIssued: false,
       },
     ],
   });

@@ -3,7 +3,9 @@ import { test } from "node:test";
 import {
   DownloadCertificateUseCase,
   IssueCertificateUseCase,
+  ListMyCertificatesUseCase,
 } from "../../src/use-cases/certificates/certificate.use-cases";
+import { ATTENDANCE_WINDOW_DAYS } from "../../src/utils/event-helpers";
 import { assertHttpError, futureIso, pastIso } from "../helpers";
 
 const CONFIG = { appWebUrl: "https://amparian-front.vercel.app" };
@@ -535,5 +537,247 @@ test("two downloads regenerating at once: the loser deletes the blob it just upl
   assert.deepEqual(
     storageCalls.map((call) => call.op),
     ["get", "put", "delete"],
+  );
+});
+
+// ---------------------------------------------------------------------------------------------
+// "Meus certificados"
+// ---------------------------------------------------------------------------------------------
+
+const DAY = 24 * 3_600_000;
+
+// Um certificado emitido, com o snapshot gravado na emissão.
+function issuedRecord(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 900,
+    registration_id: 50,
+    verification_code: "7KQ2M9XP4TDA",
+    participant_name: "Maria Eduarda Santos",
+    event_title: "Mutirão de Plantio",
+    organizer_name: "Instituto Raízes Verdes",
+    organizer_person_name: "João Pereira",
+    event_starts_at: new Date("2026-10-04T11:00:00.000Z"),
+    event_ends_at: new Date("2026-10-04T15:00:00.000Z"),
+    event_location_name: "Parque da Cidade",
+    event_is_remote: 0,
+    event_workload_hours: "4.00",
+    blob_key: "certificates/7/a.pdf",
+    issued_at: new Date("2026-10-05T12:00:00.000Z"),
+    ...overrides,
+  };
+}
+
+// Uma inscrição candidata: evento de duas horas que terminou há `endedDaysAgo` dias.
+function candidate(
+  registrationId: number,
+  endedDaysAgo: number,
+  overrides: Record<string, unknown> = {},
+) {
+  const ends = new Date(Date.now() - endedDaysAgo * DAY);
+  return {
+    registration_id: registrationId,
+    event_status: "published",
+    event_title: `Evento ${registrationId}`,
+    starts_at: new Date(ends.getTime() - 2 * 3_600_000),
+    ends_at: ends,
+    workload_hours: null,
+    attendance_status: null,
+    ...overrides,
+  };
+}
+
+function makeList(issued: Row[], candidates: Row[]) {
+  const calls: Array<{ op: string; userId: unknown }> = [];
+  const certificates = {
+    listByUser: async (userId: number) => {
+      calls.push({ op: "listByUser", userId });
+      return issued;
+    },
+    listCandidatesByUser: async (userId: number) => {
+      calls.push({ op: "listCandidatesByUser", userId });
+      return candidates;
+    },
+  };
+  return {
+    useCase: new ListMyCertificatesUseCase(certificates as never),
+    calls,
+  };
+}
+
+test("list: an issued certificate shows the snapshot, with the formatted code", async () => {
+  const { useCase, calls } = makeList([issuedRecord()], []);
+
+  const result = await useCase.execute(7);
+
+  assert.deepEqual(
+    calls.map((call) => call.userId),
+    [7, 7],
+  );
+  assert.deepEqual(result.data, [
+    {
+      registrationId: 50,
+      status: "issued",
+      eventTitle: "Mutirão de Plantio",
+      eventStartsAt: "2026-10-04T11:00:00.000Z",
+      eventEndsAt: "2026-10-04T15:00:00.000Z",
+      workloadHours: 4,
+      attendanceClosesAt: null,
+      certificate: {
+        id: 900,
+        verificationCode: "7KQ2-M9XP-4TDA",
+        issuedAt: "2026-10-05T12:00:00.000Z",
+      },
+    },
+  ]);
+  assert.deepEqual(result.summary, { issuedCount: 1, certifiedHours: 4 });
+});
+
+test("list: attendance recorded without a certificate is available, with the effective workload", async () => {
+  const { useCase } = makeList(
+    [],
+    [candidate(61, 2, { attendance_status: "present" })],
+  );
+
+  const [item] = (await useCase.execute(7)).data;
+
+  assert.equal(item.status, "available");
+  // Evento de um dia sem carga informada: vale a duração (RC-03).
+  assert.equal(item.workloadHours, 2);
+  assert.equal(item.attendanceClosesAt, null);
+  assert.equal(item.certificate, null);
+});
+
+test("list: no attendance inside the window is awaiting, with the deadline", async () => {
+  const row = candidate(62, 2);
+  const { useCase } = makeList([], [row]);
+
+  const [item] = (await useCase.execute(7)).data;
+
+  assert.equal(item.status, "awaiting_attendance");
+  assert.equal(
+    item.attendanceClosesAt,
+    new Date(
+      row.ends_at.getTime() + ATTENDANCE_WINDOW_DAYS * DAY,
+    ).toISOString(),
+  );
+});
+
+test("list: no attendance after the window closed stays as not recorded", async () => {
+  const { useCase } = makeList(
+    [],
+    [candidate(63, ATTENDANCE_WINDOW_DAYS + 1)],
+  );
+
+  const [item] = (await useCase.execute(7)).data;
+
+  assert.equal(item.status, "attendance_not_recorded");
+  assert.equal(item.attendanceClosesAt, null);
+});
+
+test("list: an event without an end date counts the window from the start", async () => {
+  const startedLongAgo = candidate(64, 0, {
+    starts_at: new Date(Date.now() - (ATTENDANCE_WINDOW_DAYS + 1) * DAY),
+    ends_at: null,
+  });
+  const startedRecently = candidate(65, 0, {
+    starts_at: new Date(Date.now() - DAY),
+    ends_at: null,
+  });
+  const { useCase } = makeList([], [startedLongAgo, startedRecently]);
+
+  const statuses = Object.fromEntries(
+    (await useCase.execute(7)).data.map((item) => [
+      item.registrationId,
+      item.status,
+    ]),
+  );
+
+  assert.deepEqual(statuses, {
+    64: "attendance_not_recorded",
+    65: "awaiting_attendance",
+  });
+});
+
+test("list: an event still going on is left out", async () => {
+  const ongoing = candidate(66, 0, {
+    starts_at: new Date(Date.now() - 3_600_000),
+    ends_at: new Date(Date.now() + 3_600_000),
+    attendance_status: "present",
+  });
+  const { useCase } = makeList([], [ongoing]);
+
+  assert.deepEqual((await useCase.execute(7)).data, []);
+});
+
+test("list: newest event first, and certified hours add only what is printed", async () => {
+  const { useCase } = makeList(
+    [
+      issuedRecord({
+        id: 901,
+        registration_id: 51,
+        event_starts_at: new Date("2026-09-01T11:00:00.000Z"),
+        event_ends_at: new Date("2026-09-01T13:30:00.000Z"),
+        event_workload_hours: "2.50",
+      }),
+      // Evento de vários dias sem carga: o certificado mostra só o período e soma 0 hora.
+      issuedRecord({
+        id: 902,
+        registration_id: 52,
+        event_starts_at: new Date("2026-08-01T11:00:00.000Z"),
+        event_ends_at: new Date("2026-08-03T20:00:00.000Z"),
+        event_workload_hours: null,
+      }),
+      issuedRecord({
+        id: 903,
+        registration_id: 53,
+        event_starts_at: new Date("2026-10-10T11:00:00.000Z"),
+        event_ends_at: new Date("2026-10-10T12:15:00.000Z"),
+        event_workload_hours: "1.25",
+      }),
+    ],
+    // Disponível, mas não emitido: não entra nas horas certificadas.
+    [
+      candidate(70, 2, {
+        attendance_status: "present",
+        workload_hours: "8.00",
+      }),
+    ],
+  );
+
+  const result = await useCase.execute(7);
+
+  assert.deepEqual(
+    result.data.map((item) => item.registrationId),
+    [70, 53, 51, 52],
+  );
+  assert.deepEqual(result.summary, { issuedCount: 3, certifiedHours: 3.75 });
+});
+
+test("list: nothing to show gives an empty list and zero totals", async () => {
+  const { useCase } = makeList([], []);
+
+  assert.deepEqual(await useCase.execute(7), {
+    data: [],
+    summary: { issuedCount: 0, certifiedHours: 0 },
+  });
+});
+
+test("list: a certificate issued while the list loads shows once, as issued", async () => {
+  // A emissão em outra aba gravou entre as duas leituras: a inscrição veio como candidata e como
+  // emitida. Vale o emitido.
+  const { useCase, calls } = makeList(
+    [issuedRecord({ registration_id: 61 })],
+    [candidate(61, 2, { attendance_status: "present" })],
+  );
+
+  const result = await useCase.execute(7);
+
+  assert.deepEqual(
+    calls.map((call) => call.op),
+    ["listCandidatesByUser", "listByUser"],
+  );
+  assert.deepEqual(
+    result.data.map((item) => [item.registrationId, item.status]),
+    [[61, "issued"]],
   );
 });

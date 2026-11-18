@@ -3,12 +3,15 @@ import type { AttendanceRepository } from "../../repositories/attendance.reposit
 import type { CertificateRepository } from "../../repositories/certificate.repository";
 import type { EventRepository } from "../../repositories/event.repository";
 import type { RegistrationRepository } from "../../repositories/registration.repository";
+import {
+  ATTENDANCE_WINDOW_DAYS,
+  attendanceWindowClosesAt,
+} from "../../utils/event-helpers";
 import { HttpError } from "../../utils/http-error";
 import { parseDbDate } from "../../utils/knex-helpers";
 
-// Prazo para lançar ou corrigir a presença depois do fim do evento
-export const ATTENDANCE_WINDOW_DAYS = 30;
-const DAY_MS = 24 * 60 * 60 * 1000;
+// O prazo da presença (RC-02) é definido em `event-helpers`, junto da regra que o calcula.
+export { ATTENDANCE_WINDOW_DAYS };
 
 export type AttendanceItemInput = {
   registrationId: number;
@@ -80,7 +83,7 @@ export class RecordAttendanceUseCase {
       }
 
       // Sem data de fim, a janela conta a partir do início — é o único marco que o evento tem.
-      const closesAt = new Date((endsAt ?? startsAt).getTime() + ATTENDANCE_WINDOW_DAYS * DAY_MS);
+      const closesAt = attendanceWindowClosesAt(startsAt, endsAt);
       if (now > closesAt) {
         // A mensagem diz de onde o prazo foi contado, porque evento sem data de fim conta do início.
         const reference = endsAt ? "o fim" : "o início";

@@ -67,6 +67,7 @@ function createApiCorsOptions(
   return (req, callback) => {
     callback(null, {
       origin: isAllowedApiOrigin(req, allowlistedOrigins, req.headers.origin),
+      exposedHeaders: ["Content-Disposition"],
     });
   };
 }
@@ -138,4 +139,3 @@ export function createApp() {
 
   return app;
 }
-

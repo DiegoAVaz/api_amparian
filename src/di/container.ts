@@ -46,6 +46,7 @@ import { RecordAttendanceUseCase } from "../use-cases/events/attendance.use-case
 import {
   DownloadCertificateUseCase,
   IssueCertificateUseCase,
+  ListMyCertificatesUseCase,
 } from "../use-cases/certificates/certificate.use-cases";
 import {
   CancelRegistrationUseCase,
@@ -178,6 +179,7 @@ function buildContainer() {
       certificateStorage,
       certificateConfig,
     ),
+    listMyCertificates: new ListMyCertificatesUseCase(certificateRepo),
 
     listMyRegistrations: new ListMyRegistrationsUseCase(registrationRepo),
     cancelRegistration: new CancelRegistrationUseCase(registrationRepo),

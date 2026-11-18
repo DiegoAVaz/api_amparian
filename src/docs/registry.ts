@@ -3,6 +3,7 @@ import {
   OpenApiGeneratorV3,
 } from "@asteasolutions/zod-to-openapi";
 import { registerAuthBoundaryContract } from "../contracts/auth.contract";
+import { registerCertificatesBoundaryContract } from "../contracts/certificates.contract";
 import { registerEventsBoundaryContract } from "../contracts/events.contract";
 import { registerMeBoundaryContract } from "../contracts/me.contract";
 import { registerSharedBoundaryComponents } from "../contracts/shared.contract";
@@ -14,6 +15,7 @@ export function generateOpenApiDocument() {
   registerAuthBoundaryContract(registry, shared);
   registerEventsBoundaryContract(registry, shared);
   registerMeBoundaryContract(registry, shared);
+  registerCertificatesBoundaryContract(registry, shared);
 
   const generator = new OpenApiGeneratorV3(registry.definitions);
 
@@ -52,6 +54,11 @@ export function generateOpenApiDocument() {
       {
         name: "me",
         description: "Área autenticada do usuário, perfil, agenda, inscrições e eventos do organizador.",
+      },
+      {
+        name: "certificates",
+        description:
+          "Certificados de participação: listagem, emissão e download do PDF pelo voluntário.",
       },
     ],
   });

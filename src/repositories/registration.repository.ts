@@ -51,6 +51,7 @@ export class RegistrationRepository {
       city: string | null;
       state: string | null;
       attendance_status: string | null;
+      certificate_id: number | null;
     }>
   > {
     // `leftJoin` porque a maioria dos inscritos ainda não tem presença lançada; a falta da linha
@@ -58,6 +59,8 @@ export class RegistrationRepository {
     return this.db("event_registrations as er")
       .join("users as u", "er.user_id", "u.id")
       .leftJoin("event_attendances as ea", "ea.registration_id", "er.id")
+      // Quem já emitiu o certificado: a lista de presença trava essas linhas (RC-04).
+      .leftJoin("certificates as c", "c.registration_id", "er.id")
       .where("er.event_id", eventId)
       .orderBy("er.created_at", "asc")
       .orderBy("er.id", "asc")
@@ -72,6 +75,7 @@ export class RegistrationRepository {
         "u.city",
         "u.state",
         "ea.status as attendance_status",
+        "c.id as certificate_id",
       );
   }
 

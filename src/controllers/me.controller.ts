@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { certificateIdParamsSchema } from "../contracts/certificates.contract";
 import {
   createEventBodySchema,
   meAgendaQuerySchema,
@@ -87,6 +88,48 @@ export const meController = {
       q.month,
     );
     res.json(result);
+  }),
+
+  listMyCertificates: wrapAsync(async (req: Request, res: Response) => {
+    const result = await getContainer().listMyCertificates.execute(
+      req.userId!,
+    );
+    res.json(result);
+  }),
+
+  issueCertificate: wrapAsync(async (req: Request, res: Response) => {
+    const { registrationId } = parseParams(
+      meRegistrationIdParamsSchema,
+      req.params,
+    );
+    const { certificate, created } =
+      await getContainer().issueCertificate.execute(
+        req.userId!,
+        registrationId,
+      );
+    // 201 só na primeira emissão; pedir de novo devolve o mesmo certificado (RC-05).
+    res.status(created ? 201 : 200).json(certificate);
+  }),
+
+  downloadCertificate: wrapAsync(async (req: Request, res: Response) => {
+    const { certificateId } = parseParams(
+      certificateIdParamsSchema,
+      req.params,
+    );
+    const { pdf, fileName } = await getContainer().downloadCertificate.execute(
+      req.userId!,
+      certificateId,
+    );
+    // O PDF tem dados pessoais: nenhum cache intermediário pode guardá-lo (RC-09). O nome do
+    // arquivo só tem letras, números e hífens, então dispensa codificação.
+    res
+      .status(200)
+      .set({
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="${fileName}"`,
+        "Cache-Control": "private, no-store",
+      })
+      .send(pdf);
   }),
 
   listMyEvents: wrapAsync(async (req: Request, res: Response) => {

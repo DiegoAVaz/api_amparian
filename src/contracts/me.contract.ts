@@ -521,6 +521,8 @@ export function registerMeBoundaryContract(
           status: z.enum(["pending", "confirmed", "cancelled"]),
           // Presença registrada; `null` sem marcação ou quando a inscrição não está confirmada.
           attendance: z.enum(["present", "absent"]).nullable(),
+          // Certificado já emitido: a presença dessa inscrição não muda mais (RC-04).
+          certificateIssued: z.boolean(),
         }),
       ),
     }),

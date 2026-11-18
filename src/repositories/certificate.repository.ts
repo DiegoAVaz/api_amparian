@@ -23,6 +23,19 @@ export type IssuanceContextRow = {
   attendance_status: AttendanceStatus | null;
 };
 
+// Uma inscrição do usuário que ainda pode virar certificado: confirmada, num evento publicado que
+// já começou, sem certificado e sem falta registrada. Quem decide o estado dela em "Meus
+// certificados" (disponível, aguardando ou sem presença) é o caso de uso.
+export type CertificateCandidateRow = {
+  registration_id: number;
+  event_status: EventStatus;
+  event_title: string;
+  starts_at: Date | string;
+  ends_at: Date | string | null;
+  workload_hours: string | null;
+  attendance_status: AttendanceStatus | null;
+};
+
 // O que o caso de uso grava. Sem `id`, `blob_key` e timestamps: são do banco, ou gravados depois.
 export type CertificateInsert = Omit<
   CertificateRecord,
@@ -134,6 +147,50 @@ export class CertificateRepository {
     if (expectedKey === null) query.whereNull("blob_key");
     else query.andWhere({ blob_key: expectedKey });
     return query.update({ blob_key: key });
+  }
+
+  // Todos os certificados do usuário, pelo dono da inscrição. Entram mesmo os de inscrição ou evento
+  // que mudaram depois: o que foi emitido é definitivo (RC-04) e mostra o snapshot (RC-06).
+  async listByUser(
+    userId: number,
+    db: Knex = this.db,
+  ): Promise<CertificateRecord[]> {
+    return db("certificates as c")
+      .join("event_registrations as er", "er.id", "c.registration_id")
+      .where("er.user_id", userId)
+      .select("c.*");
+  }
+
+  // As inscrições do usuário que ainda podem render certificado (ver `CertificateCandidateRow`).
+  // Os eventos que ainda não começaram ficam de fora já aqui; se o evento terminou, o caso de uso
+  // confere com `computeEventStatus`, a mesma regra da emissão. A falta registrada também fica de
+  // fora: não há o que esperar (RC-01).
+  async listCandidatesByUser(
+    userId: number,
+    now: Date,
+    db: Knex = this.db,
+  ): Promise<CertificateCandidateRow[]> {
+    return db("event_registrations as er")
+      .join("events as e", "e.id", "er.event_id")
+      .leftJoin("event_attendances as ea", "ea.registration_id", "er.id")
+      .leftJoin("certificates as c", "c.registration_id", "er.id")
+      .where("er.user_id", userId)
+      .andWhere("er.status", "confirmed")
+      .andWhere("e.status", "published")
+      .andWhere("e.starts_at", "<=", now)
+      .whereNull("c.id")
+      .andWhere((q) =>
+        q.whereNull("ea.status").orWhere("ea.status", "present"),
+      )
+      .select(
+        "er.id as registration_id",
+        "e.status as event_status",
+        "e.title as event_title",
+        "e.starts_at",
+        "e.ends_at",
+        "e.workload_hours",
+        "ea.status as attendance_status",
+      );
   }
 
   // Entre as inscrições pedidas, as que já têm certificado. É a trava de RC-04: a presença dessas

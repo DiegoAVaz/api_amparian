@@ -546,6 +546,8 @@ export class ListOrganizerRegistrationsUseCase {
         registrationDate: new Date(r.created_at as string).toISOString(),
         status,
         attendance,
+        // Marca o certificado emitido mesmo se a inscrição mudou depois: ele existe e é definitivo.
+        certificateIssued: Boolean(r.certificate_id),
       };
     });
 

@@ -16,6 +16,7 @@ import {
   type DocumentStorage,
 } from "../../services/storage";
 import {
+  attendanceWindowClosesAt,
   computeEventStatus,
   effectiveWorkloadHours,
   parseWorkloadHours,
@@ -415,5 +416,148 @@ export class DownloadCertificateUseCase {
     }
 
     return { pdf, fileName };
+  }
+}
+
+// Os estados de um evento em "Meus certificados". Falta registrada não aparece: não há certificado
+// nem o que esperar (RC-01).
+//   - issued: o certificado existe; a tela oferece "Baixar PDF".
+//   - available: presença registrada, ainda sem certificado; a tela oferece "Emitir e baixar".
+//   - awaiting_attendance: o organizador ainda pode lançar a presença; "Aguardando o organizador".
+//   - attendance_not_recorded: a janela de presença fechou sem lançamento; "Sem presença".
+export type CertificateListStatus =
+  | "issued"
+  | "available"
+  | "awaiting_attendance"
+  | "attendance_not_recorded";
+
+export type CertificateListItem = {
+  registrationId: number;
+  status: CertificateListStatus;
+  eventTitle: string;
+  eventStartsAt: string;
+  eventEndsAt: string | null;
+  workloadHours: number | null;
+  /** Só em `awaiting_attendance`: até quando o organizador pode lançar a presença (RC-02). */
+  attendanceClosesAt: string | null;
+  certificate: {
+    id: number;
+    verificationCode: string;
+    issuedAt: string;
+  } | null;
+};
+
+export type CertificateList = {
+  data: CertificateListItem[];
+  summary: { issuedCount: number; certifiedHours: number };
+};
+
+/**
+ * "Meus certificados": os certificados emitidos e os eventos encerrados que ainda podem render um.
+ *
+ * O certificado emitido mostra o snapshot (RC-06), e não o evento de hoje — é o que está impresso.
+ * Os demais mostram o evento como ele está, com a carga horária efetiva que sairia no certificado
+ * se fosse emitido agora (RC-03).
+ *
+ * Decisão de 18/11/2026: depois que a janela de presença fecha sem lançamento, o evento continua na
+ * lista como "Sem presença", para o voluntário entender por que não recebeu o certificado.
+ */
+export class ListMyCertificatesUseCase {
+  constructor(private readonly certificates: CertificateRepository) {}
+
+  async execute(userId: number): Promise<CertificateList> {
+    const now = new Date();
+    // Em sequência, e nesta ordem, para uma emissão em outra aba não deixar o evento duplicado nem
+    // sumido nesta resposta: o certificado gravado antes da primeira leitura já não é candidato, e
+    // o gravado entre as duas aparece nas duas — e aí vale o emitido (filtro abaixo).
+    const candidates = await this.certificates.listCandidatesByUser(
+      userId,
+      now,
+    );
+    const issued = await this.certificates.listByUser(userId);
+    const issuedRegistrations = new Set(
+      issued.map((record) => Number(record.registration_id)),
+    );
+
+    const items: CertificateListItem[] = issued.map((record) => {
+      const summary = toCertificateSummary(record);
+      return {
+        registrationId: summary.registrationId,
+        status: "issued",
+        eventTitle: summary.eventTitle,
+        eventStartsAt: summary.eventStartsAt,
+        eventEndsAt: summary.eventEndsAt,
+        workloadHours: summary.workloadHours,
+        attendanceClosesAt: null,
+        certificate: {
+          id: summary.id,
+          verificationCode: summary.verificationCode,
+          issuedAt: summary.issuedAt,
+        },
+      };
+    });
+
+    for (const row of candidates) {
+      if (issuedRegistrations.has(Number(row.registration_id))) continue;
+      const startsAt = parseDbDate(row.starts_at);
+      const endsAt = row.ends_at ? parseDbDate(row.ends_at) : null;
+      // A mesma régua da emissão (RC-01): só evento encerrado entra.
+      const computed = computeEventStatus({
+        status: row.event_status,
+        starts_at: startsAt,
+        ends_at: endsAt,
+      });
+      if (computed !== "ended") continue;
+
+      let status: CertificateListStatus = "available";
+      let attendanceClosesAt: string | null = null;
+      if (row.attendance_status !== "present") {
+        // A mesma conta da lista de presença: enquanto ela aceita lançamento, há o que esperar.
+        const closesAt = attendanceWindowClosesAt(startsAt, endsAt);
+        if (now <= closesAt) {
+          status = "awaiting_attendance";
+          attendanceClosesAt = closesAt.toISOString();
+        } else {
+          status = "attendance_not_recorded";
+        }
+      }
+
+      items.push({
+        registrationId: Number(row.registration_id),
+        status,
+        eventTitle: row.event_title,
+        eventStartsAt: startsAt.toISOString(),
+        eventEndsAt: endsAt ? endsAt.toISOString() : null,
+        workloadHours: effectiveWorkloadHours({
+          workload_hours: row.workload_hours,
+          starts_at: startsAt,
+          ends_at: endsAt,
+        }),
+        attendanceClosesAt,
+        certificate: null,
+      });
+    }
+
+    // Do evento mais recente para o mais antigo; o id desempata para a ordem não variar.
+    items.sort(
+      (a, b) =>
+        Date.parse(b.eventStartsAt) - Date.parse(a.eventStartsAt) ||
+        b.registrationId - a.registrationId,
+    );
+
+    // Horas certificadas: a soma do que está impresso nos certificados (RC-10).
+    const certifiedHours = items.reduce(
+      (sum, item) =>
+        item.status === "issued" ? sum + (item.workloadHours ?? 0) : sum,
+      0,
+    );
+
+    return {
+      data: items,
+      summary: {
+        issuedCount: issued.length,
+        certifiedHours: Math.round(certifiedHours * 100) / 100,
+      },
+    };
   }
 }
