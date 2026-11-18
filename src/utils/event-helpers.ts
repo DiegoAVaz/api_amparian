@@ -1,4 +1,5 @@
-export type ComputedEventStatus = "draft" | "cancelled" | "active" | "ongoing" | "ended";
+export type ComputedEventStatus =
+  "draft" | "cancelled" | "active" | "ongoing" | "ended";
 
 export function computeEventStatus(row: {
   status: string;
@@ -16,7 +17,9 @@ export function computeEventStatus(row: {
   return "ongoing";
 }
 
-export function organizerStatusLabel(computed: ComputedEventStatus): "Ativo" | "Encerrado" | "Em andamento" {
+export function organizerStatusLabel(
+  computed: ComputedEventStatus,
+): "Ativo" | "Encerrado" | "Em andamento" {
   if (computed === "ended") return "Encerrado";
   if (computed === "ongoing") return "Em andamento";
   return "Ativo";
@@ -26,25 +29,73 @@ export function organizerStatusLabel(computed: ComputedEventStatus): "Ativo" | "
 // precisão. A conversão para número acontece aqui, uma vez, para nenhuma resposta da API sair
 // com a carga horária como string. `undefined` também vira `null`: é o que chega de uma consulta
 // que não selecionou a coluna, e tratar como ausente é mais seguro que devolver `NaN`.
-export function parseWorkloadHours(value: string | number | null | undefined): number | null {
+export function parseWorkloadHours(
+  value: string | number | null | undefined,
+): number | null {
   if (value === null || value === undefined) return null;
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-const BRAZIL_DAY = new Intl.DateTimeFormat("en-CA", {
+const BRAZIL_LOCAL = new Intl.DateTimeFormat("en-CA", {
   timeZone: "America/Sao_Paulo",
   year: "numeric",
   month: "2-digit",
   day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
 });
+
+const DAY_MS = 24 * 3_600_000;
+
+// Até que horário da madrugada seguinte um evento noturno ainda conta como "de um dia".
+export const OVERNIGHT_END_LIMIT_MINUTES = 6 * 60;
+
+function brazilLocal(date: Date): { day: string; minutes: number } {
+  const parts = Object.fromEntries(
+    BRAZIL_LOCAL.formatToParts(date).map((part) => [part.type, part.value]),
+  );
+  return {
+    day: `${parts.year}-${parts.month}-${parts.day}`,
+    minutes: Number(parts.hour) * 60 + Number(parts.minute),
+  };
+}
+
+function nextDay(day: string): string {
+  const [year, month, date] = day.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, date + 1))
+    .toISOString()
+    .slice(0, 10);
+}
+
+/**
+ * O evento é "de um dia" (RC-03)? Sim quando dura até 24h e termina no mesmo dia em que começa
+ * OU na madrugada seguinte, até as 6h. Tudo no horário de Brasília, porque as datas ficam em UTC:
+ * um evento das 20h às 23h vai das 23h às 2h em UTC e, medido em UTC, viraria "dois dias".
+ *
+ * A madrugada entrou em 17/11/2026, por decisão do usuário: um evento das 20h à 0h, ou das 22h às
+ * 2h, é uma noite de trabalho, e não "de 8 a 9 de novembro" — ganha horário no certificado e
+ * carga horária pela duração. Um evento que segue manhã adentro continua sendo de vários dias.
+ */
+export function isSingleDayEvent(starts: Date, ends: Date): boolean {
+  if (Number.isNaN(starts.getTime()) || Number.isNaN(ends.getTime()))
+    return false;
+  const duration = ends.getTime() - starts.getTime();
+  if (duration <= 0 || duration > DAY_MS) return false;
+
+  const start = brazilLocal(starts);
+  const end = brazilLocal(ends);
+  if (start.day === end.day) return true;
+  return (
+    end.day === nextDay(start.day) && end.minutes <= OVERNIGHT_END_LIMIT_MINUTES
+  );
+}
 
 // Carga horária efetiva do evento (RC-03): a regra única usada no certificado e em "Horas doadas",
 // para os dois nunca discordarem.
 //   1. A informada pelo organizador, quando existe — vale para qualquer evento.
-//   2. Senão, a duração do evento, se ele começa e termina no mesmo dia no horário de Brasília.
-//      "Mesmo dia" é medido no fuso de Brasília porque as datas ficam em UTC: um evento das 20h às
-//      23h vai das 23h às 2h em UTC e, medido em UTC, viraria "dois dias".
+//   2. Senão, a duração do evento, se ele é "de um dia" (`isSingleDayEvent`).
 //   3. Senão (vários dias, ou sem horário de término), `null`: o certificado mostra só o período.
 export function effectiveWorkloadHours(row: {
   workload_hours: string | number | null | undefined;
@@ -57,12 +108,11 @@ export function effectiveWorkloadHours(row: {
 
   const starts = new Date(row.starts_at);
   const ends = new Date(row.ends_at);
-  if (Number.isNaN(starts.getTime()) || Number.isNaN(ends.getTime()) || ends <= starts) {
-    return null;
-  }
-  if (BRAZIL_DAY.format(starts) !== BRAZIL_DAY.format(ends)) return null;
+  if (!isSingleDayEvent(starts, ends)) return null;
 
-  return Math.round(((ends.getTime() - starts.getTime()) / 3_600_000) * 100) / 100;
+  return (
+    Math.round(((ends.getTime() - starts.getTime()) / 3_600_000) * 100) / 100
+  );
 }
 
 export function classifyTimeFilter(row: {
