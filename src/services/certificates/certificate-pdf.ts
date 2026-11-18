@@ -22,6 +22,7 @@ import {
   formatVerificationCode,
   type CertificateTextData,
 } from "./certificate-text";
+import { VERIFICATION_CODE_PATTERN } from "./verification-code";
 
 
 const PAGE_W = 1123;
@@ -48,8 +49,6 @@ const SHIELD_OUTER_PATH =
   "M18 3L5 8.5V17C5 24.18 10.64 30.9 18 33C25.36 30.9 31 24.18 31 17V8.5L18 3Z";
 const SHIELD_INNER_PATH =
   "M18 6L8 10.8V17C8 23.12 12.56 28.78 18 30.6C23.44 28.78 28 23.12 28 17V10.8L18 6Z";
-
-const VERIFICATION_CODE = /^[A-HJ-NP-Z2-9]{12}$/;
 
 // ---------------------------------------------------------------------------------------------
 // Fontes
@@ -460,7 +459,7 @@ function assertRenderable(data: CertificateDocumentData): void {
     (date): date is Date => date !== null,
   );
   const valid =
-    VERIFICATION_CODE.test(data.verificationCode) &&
+    VERIFICATION_CODE_PATTERN.test(data.verificationCode) &&
     dates.every(
       (date) => date instanceof Date && !Number.isNaN(date.getTime()),
     ) &&

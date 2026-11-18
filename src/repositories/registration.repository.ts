@@ -86,6 +86,23 @@ export class RegistrationRepository {
       .first();
   }
 
+  // A inscrição do próprio usuário, travada até o fim da transação. A emissão do certificado trava
+  // a mesma linha que a lista de presença trava (`findByEventAndIdsForUpdate`): as duas operações
+  // se enfileiram, e a presença nunca muda entre a conferência ("está presente?") e a emissão.
+  // Precisa ser a primeira leitura da transação: no InnoDB, o que a transação enxerga nas leituras
+  // comuns é fixado na primeira delas, e só assim elas veem o que foi gravado enquanto se esperava a
+  // trava.
+  async findByIdForUserForUpdate(
+    userId: number,
+    registrationId: number,
+    trx: Knex,
+  ): Promise<EventRegistrationRecord | undefined> {
+    return trx<EventRegistrationRecord>("event_registrations")
+      .where({ id: registrationId, user_id: userId })
+      .forUpdate()
+      .first();
+  }
+
   // Inscrições do evento entre os ids pedidos, travadas até o fim da transação: o status não
   // pode mudar entre a conferência ("está confirmada?") e a gravação da presença.
   async findByEventAndIdsForUpdate(

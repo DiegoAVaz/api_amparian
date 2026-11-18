@@ -40,6 +40,7 @@ type Saved = { registration_id: number; status: string; recorded_by: number; rec
 function makeUseCase(options: {
   eventRow?: Record<string, unknown> | null;
   registrationRows?: Array<Record<string, unknown>>;
+  issuedRegistrationIds?: number[];
 } = {}) {
   const stored = new Map<number, Saved>();
   const upsertCalls: Saved[][] = [];
@@ -63,8 +64,18 @@ function makeUseCase(options: {
       [...stored.values()].map((row) => ({ registration_id: row.registration_id, status: row.status })),
   };
 
+  const certificates = {
+    findIssuedRegistrationIds: async (ids: number[]) =>
+      (options.issuedRegistrationIds ?? []).filter((id) => ids.includes(id)),
+  };
+
   return {
-    useCase: new RecordAttendanceUseCase(events as never, registrations as never, attendances as never),
+    useCase: new RecordAttendanceUseCase(
+      events as never,
+      registrations as never,
+      attendances as never,
+      certificates as never,
+    ),
     upsertCalls,
   };
 }
@@ -221,4 +232,37 @@ test("the same registration twice in one batch is refused", async () => {
     { status: 422, code: "ATTENDANCE_DUPLICATED_REGISTRATION" },
   );
   assert.equal(upsertCalls.length, 0);
+});
+
+// RC-04: depois da emissão do certificado, a presença daquela inscrição não muda mais.
+test("refuses to change the attendance of someone who already issued the certificate", async () => {
+  const { useCase, upsertCalls } = makeUseCase({ issuedRegistrationIds: [11] });
+
+  const error = await assertHttpError(
+    () =>
+      useCase.execute(7, 1, [
+        { registrationId: 11, status: "absent" },
+        { registrationId: 12, status: "present" },
+      ]),
+    { status: 422, code: "ATTENDANCE_LOCKED" },
+  );
+  // A tela recebe quais linhas estão travadas.
+  assert.deepEqual(error.details, { context: { registrationIds: [11] } });
+  // A recusa vale para o envio inteiro: nem a outra inscrição é gravada.
+  assert.equal(upsertCalls.length, 0);
+});
+
+test("re-sending 'present' for a locked registration is accepted and left untouched", async () => {
+  const { useCase, upsertCalls } = makeUseCase({ issuedRegistrationIds: [11] });
+
+  await useCase.execute(7, 1, [
+    { registrationId: 11, status: "present" },
+    { registrationId: 12, status: "absent" },
+  ]);
+
+  // A linha travada não é regravada (nem `recorded_by`/`recorded_at`), mas o envio não falha.
+  assert.deepEqual(
+    upsertCalls[0].map((item) => item.registration_id),
+    [12],
+  );
 });

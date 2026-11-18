@@ -1,5 +1,6 @@
 import type { AttendanceStatus } from "../../models";
 import type { AttendanceRepository } from "../../repositories/attendance.repository";
+import type { CertificateRepository } from "../../repositories/certificate.repository";
 import type { EventRepository } from "../../repositories/event.repository";
 import type { RegistrationRepository } from "../../repositories/registration.repository";
 import { HttpError } from "../../utils/http-error";
@@ -17,14 +18,17 @@ export type AttendanceItemInput = {
 /**
  * Lista de chamada do organizador: grava em lote a presença das inscrições de um evento.
  *
- * A trava de RC-04 — presença inalterável para quem já emitiu o certificado — depende da tabela
- * de certificados e entra junto com a emissão. Até lá, toda presença dentro da janela é editável.
+ * Trava de RC-04: a presença de quem já emitiu o certificado não muda mais. Mandar "presente" de
+ * novo para essa pessoa é aceito e ignorado — não muda nada, e um cliente que envie a lista
+ * inteira não precisa saber quem está travado —, mas qualquer outra marcação é recusada, com os
+ * ids travados nos detalhes do erro.
  */
 export class RecordAttendanceUseCase {
   constructor(
     private readonly events: EventRepository,
     private readonly registrations: RegistrationRepository,
     private readonly attendances: AttendanceRepository,
+    private readonly certificates: CertificateRepository,
   ) {}
 
   async execute(organizerId: number, eventId: number, items: AttendanceItemInput[]) {
@@ -109,13 +113,39 @@ export class RecordAttendanceUseCase {
         );
       }
 
+      // As inscrições já estão travadas acima, e a emissão trava a mesma linha: entre esta consulta e
+      // a gravação, ninguém emite um certificado novo para elas.
+      //
+      // A ordem importa. No InnoDB (REPEATABLE READ), a transação fixa o que enxerga na PRIMEIRA
+      // leitura comum — não numa leitura com trava. Como as travas (`findByIdForUpdate` e
+      // `findByEventAndIdsForUpdate`) vêm antes desta consulta, ela enxerga o certificado emitido
+      // enquanto esperávamos a trava. Uma leitura comum antes das travas quebraria a RC-04.
+      const issued = new Set(
+        await this.certificates.findIssuedRegistrationIds(registrationIds, trx),
+      );
+      const locked = items
+        .filter((item) => issued.has(item.registrationId) && item.status !== "present")
+        .map((item) => item.registrationId);
+      if (locked.length > 0) {
+        // Os ids vão nos detalhes para a tela marcar as linhas travadas. São inscrições do próprio
+        // evento do organizador, então nada vaza.
+        throw new HttpError(
+          422,
+          "ATTENDANCE_LOCKED",
+          "A presença de quem já emitiu o certificado não pode mais ser alterada",
+          { context: { registrationIds: locked } },
+        );
+      }
+
       await this.attendances.upsertMany(
-        items.map((item) => ({
-          registration_id: item.registrationId,
-          status: item.status,
-          recorded_by: organizerId,
-          recorded_at: now,
-        })),
+        items
+          .filter((item) => !issued.has(item.registrationId))
+          .map((item) => ({
+            registration_id: item.registrationId,
+            status: item.status,
+            recorded_by: organizerId,
+            recorded_at: now,
+          })),
         trx,
       );
 

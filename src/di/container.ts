@@ -1,6 +1,7 @@
 import { getEnv } from "../config/env";
 import { db } from "../db/knex";
 import { AttendanceRepository } from "../repositories/attendance.repository";
+import { CertificateRepository } from "../repositories/certificate.repository";
 import { EventRepository } from "../repositories/event.repository";
 import { LookupRepository } from "../repositories/lookup.repository";
 import { PasswordResetRepository } from "../repositories/password-reset.repository";
@@ -8,7 +9,11 @@ import { RefreshTokenRepository } from "../repositories/refresh-token.repository
 import { RegistrationRepository } from "../repositories/registration.repository";
 import { UserRepository } from "../repositories/user.repository";
 import { createMailer } from "../services/mail";
-import { createPublicUrlResolver, createStorage } from "../services/storage";
+import {
+  createCertificateStorage,
+  createPublicUrlResolver,
+  createStorage,
+} from "../services/storage";
 import { ListLookupsUseCase } from "../use-cases/lookup/lookup.use-cases";
 import {
   ForgotPasswordUseCase,
@@ -39,6 +44,10 @@ import {
 } from "../use-cases/events/organizer-event.use-cases";
 import { RecordAttendanceUseCase } from "../use-cases/events/attendance.use-cases";
 import {
+  DownloadCertificateUseCase,
+  IssueCertificateUseCase,
+} from "../use-cases/certificates/certificate.use-cases";
+import {
   CancelRegistrationUseCase,
   GetMyAgendaUseCase,
   ListMyRegistrationsUseCase,
@@ -64,6 +73,7 @@ function buildContainer() {
   const eventRepo = new EventRepository(db);
   const registrationRepo = new RegistrationRepository(db);
   const attendanceRepo = new AttendanceRepository(db);
+  const certificateRepo = new CertificateRepository(db);
 
   const authTokens = new AuthTokensHelper(refreshTokenRepo, signAccessToken, {
     refreshTtlMs: refreshTtlMs(),
@@ -73,6 +83,8 @@ function buildContainer() {
 
   const storage = createStorage();
   const resolvePublicUrl = createPublicUrlResolver(storage);
+  const certificateStorage = createCertificateStorage();
+  const certificateConfig = { appWebUrl: getEnv().APP_WEB_URL };
   const uploadMaxBytes = getEnv().UPLOAD_MAX_BYTES;
 
   return {
@@ -152,6 +164,19 @@ function buildContainer() {
       eventRepo,
       registrationRepo,
       attendanceRepo,
+      certificateRepo,
+    ),
+
+    issueCertificate: new IssueCertificateUseCase(
+      certificateRepo,
+      registrationRepo,
+      certificateStorage,
+      certificateConfig,
+    ),
+    downloadCertificate: new DownloadCertificateUseCase(
+      certificateRepo,
+      certificateStorage,
+      certificateConfig,
     ),
 
     listMyRegistrations: new ListMyRegistrationsUseCase(registrationRepo),

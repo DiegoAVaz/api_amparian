@@ -1074,7 +1074,7 @@ export function registerMeBoundaryContract(
       },
       "422": {
         description:
-          "ATTENDANCE_DUPLICATED_REGISTRATION, EVENT_CANCELLED, INVALID_EVENT_DATES, ATTENDANCE_NOT_OPEN, ATTENDANCE_WINDOW_CLOSED ou REGISTRATION_NOT_CONFIRMED.",
+          "ATTENDANCE_DUPLICATED_REGISTRATION, EVENT_CANCELLED, INVALID_EVENT_DATES, ATTENDANCE_NOT_OPEN, ATTENDANCE_WINDOW_CLOSED, REGISTRATION_NOT_CONFIRMED ou ATTENDANCE_LOCKED (alguma inscrição enviada já emitiu certificado e foi marcada como ausente; os ids travados vêm em `details.context.registrationIds`).",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "500": {
