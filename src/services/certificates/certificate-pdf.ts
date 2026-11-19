@@ -159,6 +159,24 @@ function sanitize(text: string, supported: Set<number>): string {
   return out.replace(/ {2,}/g, " ").trim();
 }
 
+/**
+ * Se o PDF imprime a linha "Responsável: {pessoa}" no rodapé. "Promovida por" é a organização
+ * pública ou, sem ela, o próprio nome do organizador: quando é a organização, a linha nomeia a
+ * pessoa; quando já é a pessoa, repetir seria ruído. Um nome que some por inteiro na limpeza também
+ * esconde a linha, em vez de imprimir "Responsável:" sozinho.
+ *
+ * Exportada porque a verificação pública (RC-08) mostra essa linha só quando ela está no papel: as
+ * duas decisões saem desta mesma regra, sobre o texto já limpo.
+ */
+export function printsResponsiblePerson(
+  organizerName: string,
+  organizerPersonName: string,
+): boolean {
+  const supported = printableCodePoints();
+  const person = sanitize(organizerPersonName, supported);
+  return person.length > 0 && person !== sanitize(organizerName, supported);
+}
+
 type Piece = { text: string; font: PDFFont; color: Color };
 type Word = { pieces: Piece[]; width: number };
 type Line = { words: Word[]; width: number };
@@ -536,6 +554,13 @@ export async function renderCertificatePdf(
   const footer = layoutFooter(fonts, {
     organizerName,
     organizerPersonName,
+    // Decidido sobre os textos ORIGINAIS, como faz a verificação pública: limpar duas vezes nem
+    // sempre dá o mesmo resultado (tirar um emoji pode juntar uma letra a um acento solto, que a
+    // normalização da segunda passada funde), e as duas decisões não podem divergir.
+    showPerson: printsResponsiblePerson(
+      data.organizerName,
+      data.organizerPersonName,
+    ),
   });
   const footerBottom = footnoteTop - footer.gapToFootnote;
   const footerTop = footerBottom - footer.height;
@@ -815,16 +840,14 @@ function middleHeight(m: {
  */
 function layoutFooter(
   fonts: Fonts,
-  input: { organizerName: string; organizerPersonName: string },
+  input: {
+    organizerName: string;
+    organizerPersonName: string;
+    /** Se imprime a linha "Responsável:" — regra em `printsResponsiblePerson`. */
+    showPerson: boolean;
+  },
 ) {
-  // "Promovida por" é a organização pública ou, sem ela, o próprio nome do organizador. Quando é a
-  // organização, a linha "Responsável:" nomeia a pessoa; quando já é a pessoa, repetir seria ruído
-  // (como no mockup do evento sem organização pública).
-  // Um nome de responsável que some por inteiro na limpeza também esconde a linha, em vez de
-  // imprimir "Responsável:" sozinho.
-  const showPerson =
-    input.organizerPersonName.length > 0 &&
-    input.organizerName !== input.organizerPersonName;
+  const { showPerson } = input;
 
   // Organização em uma linha a 15 px numa coluna de 280; se não couber, 14 px em até três linhas
   // numa coluna de 300 (mockup "textos no limite"); depois disso, 12 px em até quatro, com

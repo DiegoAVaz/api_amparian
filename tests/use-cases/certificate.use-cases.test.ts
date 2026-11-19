@@ -4,6 +4,7 @@ import {
   DownloadCertificateUseCase,
   IssueCertificateUseCase,
   ListMyCertificatesUseCase,
+  VerifyCertificateUseCase,
 } from "../../src/use-cases/certificates/certificate.use-cases";
 import { ATTENDANCE_WINDOW_DAYS } from "../../src/utils/event-helpers";
 import { assertHttpError, futureIso, pastIso } from "../helpers";
@@ -779,5 +780,82 @@ test("list: a certificate issued while the list loads shows once, as issued", as
   assert.deepEqual(
     result.data.map((item) => [item.registrationId, item.status]),
     [[61, "issued"]],
+  );
+});
+
+// ---------------------------------------------------------------------------------------------
+// Verificação pública
+// ---------------------------------------------------------------------------------------------
+
+function makeVerify(record: Row | undefined) {
+  const lookups: string[] = [];
+  const certificates = {
+    findByVerificationCode: async (code: string) => {
+      lookups.push(code);
+      return record;
+    },
+  };
+  return {
+    useCase: new VerifyCertificateUseCase(certificates as never),
+    lookups,
+  };
+}
+
+test("verify: a known code shows only what is printed, from the snapshot", async () => {
+  const { useCase, lookups } = makeVerify(
+    issuedRecord({ event_is_remote: 1, event_location_name: null }),
+  );
+
+  const result = await useCase.execute("7KQ2M9XP4TDA");
+
+  assert.deepEqual(lookups, ["7KQ2M9XP4TDA"]);
+  assert.deepEqual(result, {
+    verificationCode: "7KQ2-M9XP-4TDA",
+    participantName: "Maria Eduarda Santos",
+    eventTitle: "Mutirão de Plantio",
+    organizerName: "Instituto Raízes Verdes",
+    responsiblePersonName: "João Pereira",
+    eventStartsAt: "2026-10-04T11:00:00.000Z",
+    eventEndsAt: "2026-10-04T15:00:00.000Z",
+    eventLocationName: null,
+    eventIsRemote: true,
+    workloadHours: 4,
+    issuedAt: "2026-10-05T12:00:00.000Z",
+  });
+  // Nada interno sai na resposta pública (RC-08).
+  for (const key of ["id", "registrationId", "blobKey", "blob_key"]) {
+    assert.equal(Object.hasOwn(result, key), false, key);
+  }
+});
+
+test("verify: an unknown code is 404", async () => {
+  const { useCase } = makeVerify(undefined);
+
+  await assertHttpError(() => useCase.execute("ZZZZZZZZZZZZ"), {
+    status: 404,
+    code: "CERTIFICATE_NOT_FOUND",
+  });
+});
+
+test("verify: the responsible person shows only when the PDF prints that line", async () => {
+  // Sem organização pública, "promovida por" já é a própria pessoa: o PDF não repete o nome.
+  const samePerson = makeVerify(
+    issuedRecord({
+      organizer_name: "João Pereira",
+      organizer_person_name: "João Pereira",
+    }),
+  );
+  assert.equal(
+    (await samePerson.useCase.execute("7KQ2M9XP4TDA")).responsiblePersonName,
+    null,
+  );
+
+  // Nome que some por inteiro na limpeza do PDF (só emoji): o papel não traz a linha.
+  const unprintable = makeVerify(
+    issuedRecord({ organizer_person_name: "🌱🌱" }),
+  );
+  assert.equal(
+    (await unprintable.useCase.execute("7KQ2M9XP4TDA")).responsiblePersonName,
+    null,
   );
 });

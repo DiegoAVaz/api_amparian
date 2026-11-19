@@ -1,5 +1,6 @@
 import { type OpenAPIRegistry } from "@asteasolutions/zod-to-openapi";
 import { z } from "../docs/zod-openapi";
+import { normalizeVerificationCode } from "../services/certificates/verification-code";
 import type { SharedBoundaryComponents } from "./shared.contract";
 
 export const certificateIdParamsSchema = z.object({
@@ -7,6 +8,26 @@ export const certificateIdParamsSchema = z.object({
     .number({ error: "O ID do certificado deve ser um número" })
     .int({ error: "O ID do certificado deve ser um número inteiro" })
     .positive({ error: "O ID do certificado deve ser maior que 0" }),
+});
+
+// O código como alguém digita ou lê do QR — com ou sem hífens, maiúsculo ou não — vira o formato
+// gravado antes de chegar ao caso de uso (RC-07). O que não pode ser um código é recusado aqui, sem
+// consultar o banco.
+export const certificateVerifyParamsSchema = z.object({
+  code: z
+    .string({ error: "O código de verificação é obrigatório" })
+    .max(64, { error: "Código de verificação inválido" })
+    .transform((value, ctx) => {
+      const normalized = normalizeVerificationCode(value);
+      if (normalized === null) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Código de verificação inválido",
+        });
+        return z.NEVER;
+      }
+      return normalized;
+    }),
 });
 
 // Metadados de um certificado emitido. O código vem formatado para leitura ("R4WT-8HZN-2QKC"), como
@@ -160,6 +181,76 @@ export function registerCertificatesBoundaryContract(
       "500": {
         description:
           "CERTIFICATE_CODE_UNAVAILABLE, CERTIFICATE_LAYOUT_OVERFLOW, INVALID_CERTIFICATE_DATA ou erro interno.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+    },
+  });
+
+  const publicCertificateSchema = registry.register(
+    "PublicCertificate",
+    z.object({
+      verificationCode: z.string(),
+      participantName: z.string(),
+      eventTitle: z.string(),
+      organizerName: z.string(),
+      responsiblePersonName: z
+        .string()
+        .nullable()
+        .describe(
+          "A linha \"Responsável:\" do certificado: o nome do organizador quando a ação é promovida pela organização pública dele. Nula quando o certificado não imprime essa linha.",
+        ),
+      eventStartsAt: z.iso.datetime(),
+      eventEndsAt: z.iso.datetime().nullable(),
+      eventLocationName: z.string().nullable(),
+      eventIsRemote: z.boolean(),
+      workloadHours: z.number().nullable(),
+      issuedAt: z.iso.datetime(),
+    }),
+  );
+
+  registry.registerPath({
+    method: "get",
+    path: "/certificates/verify/{code}",
+    tags: ["certificates"],
+    summary: "Verifica um certificado pelo código impresso, sem login.",
+    description:
+      "Aceita o código com ou sem hífens, em maiúsculas ou minúsculas. Devolve só o que está impresso no certificado. Não existe certificado revogado: o resultado é válido (200) ou não encontrado (404). Limitada por IP.",
+    // Rota pública: sem token, mesmo se um dia o documento ganhar segurança global.
+    security: [],
+    request: {
+      params: z.object({
+        code: z.string().max(64).openapi({
+          example: "R4WT-8HZN-2QKC",
+          param: {
+            name: "code",
+            in: "path",
+            description:
+              "Código de verificação: 12 símbolos de A–Z e 2–9, sem I, O, 0 e 1. Hífens, espaços e minúsculas são aceitos e ignorados.",
+            required: true,
+          },
+        }),
+      }),
+    },
+    responses: {
+      "200": {
+        description: "Certificado válido.",
+        content: { "application/json": { schema: publicCertificateSchema } },
+      },
+      "400": {
+        description:
+          "INVALID_ROUTE_PARAMS: o texto não pode ser um código (tamanho ou símbolos fora do alfabeto).",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      "404": {
+        description: "CERTIFICATE_NOT_FOUND: nenhum certificado com este código.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      "429": {
+        description: "TOO_MANY_REQUESTS: muitas consultas deste IP.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      "500": {
+        description: "Erro interno.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
     },

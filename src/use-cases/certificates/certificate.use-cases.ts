@@ -7,6 +7,7 @@ import type { RegistrationRepository } from "../../repositories/registration.rep
 import {
   assertPrintableParticipantName,
   formatVerificationCode,
+  printsResponsiblePerson,
   renderCertificatePdf,
   type CertificateDocumentData,
 } from "../../services/certificates";
@@ -558,6 +559,67 @@ export class ListMyCertificatesUseCase {
         issuedCount: issued.length,
         certifiedHours: Math.round(certifiedHours * 100) / 100,
       },
+    };
+  }
+}
+
+// O que a verificação pública mostra: só o que está impresso no papel (RC-08) — nome completo,
+// ação, organização, responsável (quando o papel o traz), período, local, carga horária e emissão.
+// Nada de ids, e-mail ou PDF.
+export type PublicCertificate = {
+  verificationCode: string;
+  participantName: string;
+  eventTitle: string;
+  organizerName: string;
+  /** A linha "Responsável:" do rodapé; `null` quando o PDF não a imprime. */
+  responsiblePersonName: string | null;
+  eventStartsAt: string;
+  eventEndsAt: string | null;
+  eventLocationName: string | null;
+  eventIsRemote: boolean;
+  workloadHours: number | null;
+  issuedAt: string;
+};
+
+/**
+ * Verificação pública do certificado, por código (RC-08). Qualquer pessoa, sem conta, confere se o
+ * documento que tem na mão existe e se os dados batem. Mostra o snapshot (RC-06), o mesmo que está
+ * impresso; como não há revogação (RC-04), só há dois resultados: válido ou não encontrado.
+ */
+export class VerifyCertificateUseCase {
+  constructor(private readonly certificates: CertificateRepository) {}
+
+  /** `code` já normalizado pelo contrato (`certificateVerifyParamsSchema`). */
+  async execute(code: string): Promise<PublicCertificate> {
+    const record = await this.certificates.findByVerificationCode(code);
+    if (!record) {
+      throw new HttpError(
+        404,
+        "CERTIFICATE_NOT_FOUND",
+        "Nenhum certificado foi encontrado com este código",
+      );
+    }
+
+    const summary = toCertificateSummary(record);
+    return {
+      verificationCode: summary.verificationCode,
+      participantName: record.participant_name,
+      eventTitle: summary.eventTitle,
+      organizerName: record.organizer_name,
+      // Decisão de 18/11/2026: quem confere compara a tela com o papel, e o nome já está impresso.
+      // Por isso aparece exatamente quando o PDF imprime a linha — nunca além dela.
+      responsiblePersonName: printsResponsiblePerson(
+        record.organizer_name,
+        record.organizer_person_name,
+      )
+        ? record.organizer_person_name
+        : null,
+      eventStartsAt: summary.eventStartsAt,
+      eventEndsAt: summary.eventEndsAt,
+      eventLocationName: record.event_location_name,
+      eventIsRemote: Boolean(record.event_is_remote),
+      workloadHours: summary.workloadHours,
+      issuedAt: summary.issuedAt,
     };
   }
 }

@@ -64,6 +64,11 @@ const schema = z
       .int()
       .positive()
       .default(10),
+    CERTIFICATE_VERIFY_RATE_LIMIT_MAX: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(30),
     DB_HOST: z.string().default("127.0.0.1"),
     DB_PORT: z.coerce.number().default(3306),
     DB_USER: z.string().default("root"),

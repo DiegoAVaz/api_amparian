@@ -6,6 +6,10 @@ import {
   resetPasswordBodySchema,
 } from "../../src/contracts/auth.contract";
 import {
+  certificateIdParamsSchema,
+  certificateVerifyParamsSchema,
+} from "../../src/contracts/certificates.contract";
+import {
   eventRegistrationBodySchema,
   publicEventIdParamsSchema,
   publicEventsListQuerySchema,
@@ -167,5 +171,32 @@ test("organizer event schemas reject invalid closed-domain values", () => {
   assert.equal(
     updateOrganizerRegistrationBodySchema.safeParse({ status: "approved" }).success,
     false,
+  );
+});
+
+test("certificate verify code is normalized before reaching the use case (RC-07)", () => {
+  // Como alguém digita ou lê do papel: minúsculas, hífens, espaços.
+  for (const typed of ["r4wt-8hzn-2qkc", "R4WT8HZN2QKC", " R4WT 8HZN 2QKC "]) {
+    assert.deepEqual(certificateVerifyParamsSchema.parse({ code: typed }), {
+      code: "R4WT8HZN2QKC",
+    });
+  }
+
+  // 0, 1, I e O não existem no alfabeto; tamanho errado também não é código.
+  for (const invalid of ["R4WT-8HZN-2QK0", "R4WT-8HZN-2QKI", "R4WT-8HZN-2QK", "R4WT-8HZN-2QKCX", "", "x".repeat(65)]) {
+    const result = certificateVerifyParamsSchema.safeParse({ code: invalid });
+    assert.equal(result.success, false, invalid);
+  }
+});
+
+test("certificate id param rejects non-positive ids with a Portuguese message", () => {
+  assert.deepEqual(certificateIdParamsSchema.parse({ certificateId: "12" }), {
+    certificateId: 12,
+  });
+  const result = certificateIdParamsSchema.safeParse({ certificateId: "0" });
+  assert.equal(result.success, false);
+  assert.equal(
+    result.error?.issues[0]?.message,
+    "O ID do certificado deve ser maior que 0",
   );
 });

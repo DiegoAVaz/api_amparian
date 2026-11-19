@@ -76,6 +76,17 @@ export class CertificateRepository {
       .first();
   }
 
+  // Busca da verificação pública (RC-08). O código chega já normalizado pela aplicação (RC-07):
+  // a consulta compara igualdade exata e não depende da collation do banco.
+  async findByVerificationCode(
+    code: string,
+    db: Knex = this.db,
+  ): Promise<CertificateRecord | undefined> {
+    return db<CertificateRecord>("certificates")
+      .where({ verification_code: code })
+      .first();
+  }
+
   // O certificado só aparece para o dono da inscrição. Certificado de outra pessoa e certificado
   // inexistente dão o mesmo resultado, para o id não virar um jeito de sondar emissões alheias.
   async findByIdForUser(

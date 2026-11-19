@@ -47,6 +47,7 @@ import {
   DownloadCertificateUseCase,
   IssueCertificateUseCase,
   ListMyCertificatesUseCase,
+  VerifyCertificateUseCase,
 } from "../use-cases/certificates/certificate.use-cases";
 import {
   CancelRegistrationUseCase,
@@ -180,6 +181,7 @@ function buildContainer() {
       certificateConfig,
     ),
     listMyCertificates: new ListMyCertificatesUseCase(certificateRepo),
+    verifyCertificate: new VerifyCertificateUseCase(certificateRepo),
 
     listMyRegistrations: new ListMyRegistrationsUseCase(registrationRepo),
     cancelRegistration: new CancelRegistrationUseCase(registrationRepo),

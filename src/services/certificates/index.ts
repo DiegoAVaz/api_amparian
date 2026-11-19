@@ -1,5 +1,6 @@
 export {
   assertPrintableParticipantName,
+  printsResponsiblePerson,
   renderCertificatePdf,
 } from "./certificate-pdf";
 export type { CertificateDocumentData } from "./certificate-pdf";

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { PDFDocument } from "pdf-lib";
 import {
+  printsResponsiblePerson,
   renderCertificatePdf,
   type CertificateDocumentData,
 } from "../../src/services/certificates";
@@ -175,4 +176,15 @@ test("refuses data that would print a broken certificate", async () => {
       code: "INVALID_CERTIFICATE_DATA",
     });
   }
+});
+
+test("the 'Responsável' rule decides on the original texts, the same way for the PDF and the public check", () => {
+  assert.equal(printsResponsiblePerson("Instituto Raízes Verdes", "João Pereira"), true);
+  // Sem organização pública, "promovida por" já é a pessoa.
+  assert.equal(printsResponsiblePerson("João Pereira", "João Pereira"), false);
+  // Só emoji: some na limpeza, e a linha não sai.
+  assert.equal(printsResponsiblePerson("Instituto", "🌱🌱"), false);
+  // Tirar o emoji deixa "e" + acento solto, que uma segunda limpeza fundiria em "é". Decidir sobre
+  // o texto já limpo daria `false` aqui, e o PDF e a verificação discordariam.
+  assert.equal(printsResponsiblePerson("José", "Jose🌱́"), true);
 });

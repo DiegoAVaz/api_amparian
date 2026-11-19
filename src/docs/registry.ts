@@ -58,7 +58,7 @@ export function generateOpenApiDocument() {
       {
         name: "certificates",
         description:
-          "Certificados de participação: listagem, emissão e download do PDF pelo voluntário.",
+          "Certificados de participação: listagem, emissão e download do PDF pelo voluntário, e a verificação pública por código.",
       },
     ],
   });
