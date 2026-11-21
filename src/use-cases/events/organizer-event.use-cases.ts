@@ -1,4 +1,5 @@
 import type { EventStatus } from "../../models/event.model";
+import type { CertificateRepository } from "../../repositories/certificate.repository";
 import type { EventRepository } from "../../repositories/event.repository";
 import type { LookupRepository } from "../../repositories/lookup.repository";
 import type { RegistrationRepository } from "../../repositories/registration.repository";
@@ -31,6 +32,20 @@ function ensureValidEventDates(startsAt: Date, endsAt: Date | null): void {
     );
   }
 }
+
+// Evento encerrado (RC-11) é registro do que já aconteceu: título, datas, local e capa são o que os
+// voluntários viveram e o que a lista de presença e os certificados descrevem. Rascunho e evento
+// cancelado ficam de fora — `computeEventStatus` só devolve "ended" para evento publicado.
+function isEndedEvent(event: {
+  status: string;
+  starts_at: Date | string;
+  ends_at: Date | string | null;
+}): boolean {
+  return computeEventStatus(event) === "ended";
+}
+
+const EVENT_ENDED_EDIT_MESSAGE =
+  "Evento encerrado não pode ser editado. Só a carga horária ainda pode mudar, enquanto nenhum certificado do evento tiver sido emitido.";
 
 function isBlank(value: unknown): boolean {
   return typeof value !== "string" || value.trim().length === 0;
@@ -210,6 +225,7 @@ export class UpdateEventUseCase {
   constructor(
     private readonly events: EventRepository,
     private readonly resolvePublicUrl: PublicUrlResolver,
+    private readonly certificates: Pick<CertificateRepository, "existsForEvent">,
   ) {}
 
   async execute(
@@ -235,6 +251,21 @@ export class UpdateEventUseCase {
     const existing = await this.events.findByOrganizerAndId(userId, eventId);
     if (!existing)
       throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
+
+    // RC-11: depois do fim, a única exceção é a carga horária, porque o organizador pode ter
+    // esquecido de informá-la e ela só importa para os certificados. Ela trava na primeira emissão:
+    // mudar depois faria certificados do mesmo evento saírem com cargas diferentes. Qualquer outro
+    // campo no corpo recusa o pedido inteiro, em vez de aplicar só a parte permitida.
+    const ended = isEndedEvent(existing);
+    if (ended) {
+      const sentFields = Object.entries(patch)
+        .filter(([, value]) => value !== undefined)
+        .map(([field]) => field);
+      if (sentFields.some((field) => field !== "workloadHours")) {
+        throw new HttpError(422, "EVENT_ENDED", EVENT_ENDED_EDIT_MESSAGE);
+      }
+    }
+
     const nextStartsAt =
       patch.startsAt !== undefined
         ? new Date(patch.startsAt)
@@ -250,6 +281,32 @@ export class UpdateEventUseCase {
     ensureValidEventDates(nextStartsAt, nextEndsAt);
 
     await this.events.transaction(async (trx) => {
+      // A conferência "já tem certificado?" e a gravação da carga precisam acontecer sem uma emissão
+      // no meio. A emissão trava a linha do evento antes de ler a carga
+      // (`CertificateRepository.lockEventForIssuance`); aqui a mesma linha é travada antes de
+      // conferir, então as duas operações se enfileiram: ou a emissão vem antes e esta edição é
+      // recusada, ou a edição vem antes e a emissão já lê a carga nova.
+      // A trava tem de ser a primeira leitura da transação: no InnoDB, o que as leituras comuns
+      // enxergam é fixado na primeira delas, e só assim `existsForEvent` vê um certificado gravado
+      // enquanto se esperava a trava.
+      // Trava sempre que a carga vem no corpo, e decide "encerrado?" pela linha travada, não pela
+      // leitura de antes da transação: na virada do horário de fim, o evento lido ainda em andamento
+      // pode já ter emitido o primeiro certificado quando a gravação chega.
+      if (patch.workloadHours !== undefined) {
+        const locked = await this.events.findByIdForUpdate(trx, eventId);
+        if (
+          locked &&
+          isEndedEvent(locked) &&
+          (await this.certificates.existsForEvent(eventId, trx))
+        ) {
+          throw new HttpError(
+            422,
+            "EVENT_WORKLOAD_LOCKED",
+            "A carga horária não pode mais mudar: este evento já tem certificado emitido.",
+          );
+        }
+      }
+
       const row: Record<string, unknown> = {};
       if (patch.title !== undefined) row.title = patch.title;
       if (patch.summary !== undefined) row.summary = patch.summary;
@@ -696,6 +753,10 @@ export class UploadEventCoverUseCase {
     const before = await this.events.findByOrganizerAndId(userId, eventId);
     if (!before)
       throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
+    // A capa é parte do evento (RC-11). A checagem vem antes do `put` para não subir um blob que
+    // seria apagado em seguida.
+    if (isEndedEvent(before))
+      throw new HttpError(422, "EVENT_ENDED", "Não é possível alterar a capa de evento encerrado");
 
     const key = buildEventCoverKey(eventId, image);
     await this.storage.put(key, image);
@@ -737,6 +798,8 @@ export class DeleteEventCoverUseCase {
     const before = await this.events.findByOrganizerAndId(userId, eventId);
     if (!before)
       throw new HttpError(404, "EVENT_NOT_FOUND", "Evento não encontrado");
+    if (isEndedEvent(before))
+      throw new HttpError(422, "EVENT_ENDED", "Não é possível remover a capa de evento encerrado");
 
     const changed = await this.events.setCoverImage(userId, eventId, null);
     if (!changed)

@@ -46,6 +46,9 @@ function event(overrides: Record<string, unknown> = {}) {
   };
 }
 
+// Para os testes de edição que não tratam de evento encerrado: nenhum certificado emitido.
+const noCertificates = { existsForEvent: async () => false };
+
 test("lists organizer events and applies time filter", async () => {
   const future = futureIso(3);
   const past = pastIso(3);
@@ -178,7 +181,7 @@ test("updates organizer event fields and lookup relationships", async () => {
     findRequirementsForEvent: async () => [],
   };
 
-  const result = await new UpdateEventUseCase(events as never, fakePublicUrl).execute(7, 20, {
+  const result = await new UpdateEventUseCase(events as never, fakePublicUrl, noCertificates).execute(7, 20, {
     title: "Titulo Novo",
     publish: true,
     typeCodes: ["education"],
@@ -196,7 +199,7 @@ test("update organizer event returns 404 and invalid lookup errors", async () =>
     () =>
       new UpdateEventUseCase({
         findByOrganizerAndId: async () => undefined,
-      } as never, fakePublicUrl).execute(7, 20, { title: "Novo" }),
+      } as never, fakePublicUrl, noCertificates).execute(7, 20, { title: "Novo" }),
     { status: 404, code: "EVENT_NOT_FOUND" },
   );
 
@@ -211,7 +214,7 @@ test("update organizer event returns 404 and invalid lookup errors", async () =>
         findByOrganizerAndId: async () => event({ id: 20 }),
         transaction: async (fn: (trxArg: typeof trx) => Promise<void>) => fn(trx),
         updateEvent: async () => undefined,
-      } as never, fakePublicUrl).execute(7, 20, { typeCodes: ["invalid"] }),
+      } as never, fakePublicUrl, noCertificates).execute(7, 20, { typeCodes: ["invalid"] }),
     { status: 400, code: "INVALID_EVENT_TYPES" },
   );
 });
@@ -400,6 +403,7 @@ function workloadEvents(existing: Record<string, unknown>, captured: { inserted?
     replaceEventTypes: async () => undefined,
     replaceEventRequirements: async () => undefined,
     findByOrganizerAndId: async () => existing,
+    findByIdForUpdate: async () => existing,
     findTypesForEvent: async () => [{ code: "education", label: "Educacao" }],
     findRequirementsForEvent: async () => [],
   };
@@ -445,7 +449,7 @@ test("creating a published event stores the workload hours", async () => {
 
 test("editing sets or clears the informed workload hours, even on a published event", async () => {
   const set: { updated?: unknown } = {};
-  await new UpdateEventUseCase(workloadEvents(event({ status: "draft" }), set) as never, fakePublicUrl).execute(
+  await new UpdateEventUseCase(workloadEvents(event({ status: "draft" }), set) as never, fakePublicUrl, noCertificates).execute(
     7,
     1,
     { publish: true, workloadHours: 3 },
@@ -456,7 +460,7 @@ test("editing sets or clears the informed workload hours, even on a published ev
   const cleared: { updated?: unknown } = {};
   await new UpdateEventUseCase(
     workloadEvents(event({ status: "published", workload_hours: "4.00" }), cleared) as never,
-    fakePublicUrl,
+    fakePublicUrl, noCertificates,
   ).execute(7, 1, { workloadHours: null });
   assert.equal((cleared.updated as { workload_hours: unknown }).workload_hours, null);
 });
@@ -620,4 +624,100 @@ test("organizer registration update returns expected 404 and 422 errors", async 
       }).useCase.execute(7, 1, 11, "confirmed"),
     { status: 422, code: "CAPACITY_FULL" },
   );
+});
+
+// ------------------------------------------------------------ RC-11: evento encerrado
+
+function endedEvent(overrides: Record<string, unknown> = {}) {
+  return event({ status: "published", starts_at: pastIso(3), ends_at: pastIso(2), ...overrides });
+}
+
+test("an ended event refuses any field other than workload hours", async () => {
+  let wrote = false;
+  const events = {
+    findByOrganizerAndId: async () => endedEvent(),
+    transaction: async () => {
+      wrote = true;
+    },
+  };
+  for (const patch of [{ title: "Outro" }, { workloadHours: 4, title: "Outro" }, { publish: true }]) {
+    await assertHttpError(
+      () => new UpdateEventUseCase(events as never, fakePublicUrl, noCertificates).execute(7, 1, patch),
+      { status: 422, code: "EVENT_ENDED" },
+    );
+  }
+  assert.equal(wrote, false, "nada podia ter sido gravado");
+});
+
+test("an ended event still takes workload hours while no certificate was issued", async () => {
+  const set: { updated?: unknown } = {};
+  await new UpdateEventUseCase(workloadEvents(endedEvent(), set) as never, fakePublicUrl, noCertificates).execute(
+    7,
+    1,
+    { workloadHours: 4 },
+  );
+  assert.deepEqual(set.updated, { workload_hours: 4 });
+});
+
+test("an ended event with an issued certificate locks workload hours", async () => {
+  const steps: string[] = [];
+  await assertHttpError(
+    () =>
+      new UpdateEventUseCase(
+        {
+          findByOrganizerAndId: async () => endedEvent({ id: 9 }),
+          transaction: async (fn: (trx: unknown) => Promise<unknown>) => fn({}),
+          findByIdForUpdate: async (_trx: unknown, eventId: number) => {
+            steps.push(`lock:${eventId}`);
+            return endedEvent({ id: 9 });
+          },
+          updateEvent: async () => {
+            steps.push("update");
+          },
+        } as never,
+        fakePublicUrl,
+        {
+          existsForEvent: async (eventId: number) => {
+            steps.push(`exists:${eventId}`);
+            return true;
+          },
+        },
+      ).execute(7, 9, { workloadHours: 6 }),
+    { status: 422, code: "EVENT_WORKLOAD_LOCKED" },
+  );
+  // A conferência vem depois da trava do evento, dentro da transação, e nada é gravado.
+  assert.deepEqual(steps, ["lock:9", "exists:9"]);
+});
+
+// Na virada do horário de fim: lido antes da transação, o evento ainda está em andamento; travado,
+// já terminou e emitiu o primeiro certificado. Vale o que a linha travada diz.
+test("workload edit decides 'ended' from the locked row, not the earlier read", async () => {
+  await assertHttpError(
+    () =>
+      new UpdateEventUseCase(
+        {
+          findByOrganizerAndId: async () =>
+            event({ id: 9, status: "published", starts_at: pastIso(1), ends_at: futureIso(1) }),
+          transaction: async (fn: (trx: unknown) => Promise<unknown>) => fn({}),
+          findByIdForUpdate: async () => endedEvent({ id: 9 }),
+          updateEvent: async () => assert.fail("nada podia ter sido gravado"),
+        } as never,
+        fakePublicUrl,
+        { existsForEvent: async () => true },
+      ).execute(7, 9, { workloadHours: 6 }),
+    { status: 422, code: "EVENT_WORKLOAD_LOCKED" },
+  );
+});
+
+test("drafts and ongoing events stay fully editable", async () => {
+  for (const existing of [
+    event({ status: "draft", starts_at: pastIso(3), ends_at: pastIso(2) }),
+    event({ status: "published", starts_at: pastIso(1), ends_at: futureIso(1) }),
+  ]) {
+    const set: { updated?: unknown } = {};
+    await new UpdateEventUseCase(workloadEvents(existing, set) as never, fakePublicUrl, {
+      existsForEvent: async () => true,
+    }).execute(7, 1, { title: "Outro", workloadHours: 2 });
+    assert.equal((set.updated as { title: string }).title, "Outro");
+  }
 });

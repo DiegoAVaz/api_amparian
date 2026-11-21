@@ -200,9 +200,12 @@ async function storePdf(
 /**
  * Emissão do certificado pelo próprio voluntário (RC-05), no primeiro "Emitir e baixar".
  *
- * Tudo o que decide e grava acontece numa transação que trava a inscrição: a mesma linha que a lista
- * de presença trava. Assim a emissão e uma mudança de presença nunca se cruzam (RC-04), e dois
- * cliques simultâneos se enfileiram — o segundo encontra o certificado do primeiro.
+ * Tudo o que decide e grava acontece numa transação que trava, nesta ordem, o evento (trava
+ * compartilhada) e a inscrição: a mesma ordem da lista de presença. A trava da inscrição faz a
+ * emissão e uma mudança de presença nunca se cruzarem (RC-04), e dois cliques simultâneos se
+ * enfileirarem — o segundo encontra o certificado do primeiro. A do evento faz a carga horária não
+ * mudar no meio da emissão (RC-11); como é compartilhada, emissões do mesmo evento não esperam umas
+ * pelas outras, mas a gravação da presença espera as emissões em andamento terminarem.
  *
  * O PDF é gerado ANTES de gravar a linha, dentro da transação. Qualquer recusa do gerador (nome ou
  * título que não se imprimem, texto que não cabe) desfaz tudo, e nunca sobra um certificado que não
@@ -222,7 +225,29 @@ export class IssueCertificateUseCase {
     userId: number,
     registrationId: number,
   ): Promise<{ certificate: CertificateSummary; created: boolean }> {
+    // O evento da inscrição é lido antes da transação porque a primeira trava dela é a do evento:
+    // a lista de presença e a confirmação de inscrição travam evento e depois inscrição, e a emissão
+    // segue a mesma ordem — em ordem invertida, duas operações poderiam esperar uma pela outra para
+    // sempre. O `event_id` de uma inscrição nunca muda, então lê-lo fora da transação é seguro; a
+    // posse é conferida de novo lá dentro, com a trava.
+    const eventId = await this.registrations.findEventIdForUser(
+      userId,
+      registrationId,
+    );
+    // Inscrição de outra pessoa responde como inexistente (RN05).
+    if (eventId === undefined) {
+      throw new HttpError(
+        404,
+        "REGISTRATION_NOT_FOUND",
+        "Inscrição não encontrada",
+      );
+    }
+
     const outcome = await this.certificates.transaction(async (trx) => {
+      // Trava compartilhada no evento antes de tudo: a carga horária lida adiante não muda até o
+      // fim desta transação (RC-11). A edição da carga de evento encerrado trava a mesma linha.
+      await this.certificates.lockEventForIssuance(eventId, trx);
+
       const registration = await this.registrations.findByIdForUserForUpdate(
         userId,
         registrationId,

@@ -140,7 +140,11 @@ function buildContainer() {
       lookupRepo,
       resolvePublicUrl,
     ),
-    updateEvent: new UpdateEventUseCase(eventRepo, resolvePublicUrl),
+    updateEvent: new UpdateEventUseCase(
+      eventRepo,
+      resolvePublicUrl,
+      certificateRepo,
+    ),
     deleteEvent: new DeleteEventUseCase(eventRepo, registrationRepo, storage),
     publishEvent: new PublishEventUseCase(eventRepo, resolvePublicUrl),
     uploadEventCover: new UploadEventCoverUseCase(

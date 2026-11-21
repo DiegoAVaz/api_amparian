@@ -687,6 +687,10 @@ export function registerMeBoundaryContract(
         description: "Evento não encontrado ou de outro organizador.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
+      "422": {
+        description: "EVENT_ENDED: evento encerrado não tem a capa alterada.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
       ...uploadErrorResponses,
     },
   });
@@ -713,6 +717,10 @@ export function registerMeBoundaryContract(
       },
       "404": {
         description: "Evento não encontrado ou de outro organizador.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      "422": {
+        description: "EVENT_ENDED: evento encerrado não tem a capa removida.",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "500": {
@@ -1194,6 +1202,11 @@ export function registerMeBoundaryContract(
       },
       "404": {
         description: "Evento não encontrado.",
+        content: { "application/json": { schema: shared.errorEnvelopeSchema } },
+      },
+      "422": {
+        description:
+          "EVENT_ENDED (evento encerrado só aceita `workloadHours` no corpo; qualquer outro campo recusa o pedido inteiro) ou EVENT_WORKLOAD_LOCKED (evento encerrado que já tem certificado emitido: a carga horária não muda mais).",
         content: { "application/json": { schema: shared.errorEnvelopeSchema } },
       },
       "500": {

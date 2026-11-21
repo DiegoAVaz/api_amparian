@@ -77,8 +77,12 @@ function makeIssue(
   const codes = [...(options.codes ?? ["7KQ2M9XP4TDA"])];
   const taken = new Set(options.takenCodes ?? []);
 
+  const locks: string[] = [];
   const certificates = {
     transaction: async <T>(fn: (trx: unknown) => Promise<T>) => fn({}),
+    lockEventForIssuance: async (eventId: number) => {
+      locks.push(`event:${eventId}`);
+    },
     findByRegistrationId: async () => {
       reads += 1;
       if (reads > 1 && options.registrationConflict) {
@@ -103,11 +107,17 @@ function makeIssue(
       return options.setBlobKeyResult ?? 1;
     },
   };
+  const registrationRow = () =>
+    Object.hasOwn(options, "registrationRow")
+      ? options.registrationRow
+      : registration();
   const registrations = {
-    findByIdForUserForUpdate: async () =>
-      Object.hasOwn(options, "registrationRow")
-        ? options.registrationRow
-        : registration(),
+    findEventIdForUser: async () =>
+      (registrationRow() as { event_id?: number } | undefined)?.event_id,
+    findByIdForUserForUpdate: async () => {
+      locks.push("registration");
+      return registrationRow();
+    },
   };
   const storage = {
     put: async (key: string) => {
@@ -141,6 +151,7 @@ function makeIssue(
     rendered,
     storageCalls,
     blobKeys,
+    locks,
   };
 }
 
@@ -858,4 +869,12 @@ test("verify: the responsible person shows only when the PDF prints that line", 
     (await unprintable.useCase.execute("7KQ2M9XP4TDA")).responsiblePersonName,
     null,
   );
+});
+
+// RC-11: a emissão trava o evento antes da inscrição — a mesma ordem da lista de presença e da
+// confirmação de inscrição. Em ordem invertida, as duas poderiam esperar uma pela outra para sempre.
+test("issuance locks the event row before the registration", async () => {
+  const { useCase, locks } = makeIssue({ registrationRow: registration({ event_id: 33 }) });
+  await useCase.execute(7, 50);
+  assert.deepEqual(locks, ["event:33", "registration"]);
 });

@@ -102,6 +102,15 @@ export class CertificateRepository {
       .first();
   }
 
+  // Trava compartilhada na linha do evento, até o fim da transação de emissão; é a primeira trava
+  // dela. A edição da carga horária de evento encerrado trava a mesma linha de forma exclusiva antes
+  // de conferir se já há certificado (RC-11): uma espera a outra, e o certificado nunca sai com uma
+  // carga que mudou no meio da emissão. Compartilhada, e não exclusiva, para que duas emissões do
+  // mesmo evento não se enfileirem entre si.
+  async lockEventForIssuance(eventId: number, db: Knex): Promise<void> {
+    await db("events").where({ id: eventId }).forShare().first("id");
+  }
+
   async findIssuanceContext(
     registrationId: number,
     db: Knex = this.db,
@@ -202,6 +211,16 @@ export class CertificateRepository {
         "e.workload_hours",
         "ea.status as attendance_status",
       );
+  }
+
+  // Se algum inscrito do evento já emitiu certificado. Depois da primeira emissão, a carga horária
+  // do evento encerrado não muda mais (RC-11): os certificados do mesmo evento saem com a mesma carga.
+  async existsForEvent(eventId: number, db: Knex = this.db): Promise<boolean> {
+    const row = await db("certificates as c")
+      .join("event_registrations as er", "er.id", "c.registration_id")
+      .where("er.event_id", eventId)
+      .first("c.id");
+    return row !== undefined;
   }
 
   // Entre as inscrições pedidas, as que já têm certificado. É a trava de RC-04: a presença dessas

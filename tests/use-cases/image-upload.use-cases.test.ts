@@ -10,7 +10,7 @@ import {
   UploadAvatarUseCase,
 } from "../../src/use-cases/user/profile.use-cases";
 import type { Storage, StoredObject } from "../../src/services/storage";
-import { assertHttpError, fakePublicUrl, futureIso } from "../helpers";
+import { assertHttpError, fakePublicUrl, futureIso, pastIso } from "../helpers";
 
 const MAX = 4_000_000;
 
@@ -198,6 +198,40 @@ test("cover upload on someone else's event answers 404", async () => {
   );
 
   assert.deepEqual(written, [], "não podia ter subido blob de evento alheio");
+});
+
+// RC-11: a capa é parte do evento encerrado. A recusa vem antes do `put`, então nenhum blob sobe.
+test("an ended event refuses cover upload and removal", async () => {
+  const { storage, written, deleted } = fakeStorage();
+  const coverWrites: (string | null)[] = [];
+  const events = eventRepo({
+    findByOrganizerAndId: async () => ({
+      id: 12,
+      title: "Mutirao",
+      summary: "Resumo",
+      starts_at: pastIso(3),
+      ends_at: pastIso(2),
+      status: "published",
+      cover_image_url: "events/12/cover-abc.png",
+    }),
+    setCoverImage: async (_o: number, _e: number, value: string | null) => {
+      coverWrites.push(value);
+      return 1;
+    },
+  });
+
+  await assertHttpError(
+    async () => new UploadEventCoverUseCase(events as never, storage, fakePublicUrl, MAX).execute(7, 12, PNG),
+    { status: 422, code: "EVENT_ENDED" },
+  );
+  await assertHttpError(
+    async () => new DeleteEventCoverUseCase(events as never, storage, fakePublicUrl).execute(7, 12),
+    { status: 422, code: "EVENT_ENDED" },
+  );
+
+  assert.deepEqual(written, []);
+  assert.deepEqual(deleted, []);
+  assert.deepEqual(coverWrites, []);
 });
 
 // Corrida: o evento some entre a leitura e a escrita. O blob recém-criado ficou
